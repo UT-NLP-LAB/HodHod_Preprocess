@@ -41,7 +41,7 @@ class Preprocessor:
         file_name = os.path.splitext(os.path.basename(file_path))[0]
         source = os.path.basename(os.path.dirname(file_path))
         file_type = os.path.splitext(file_path)[-1]
-        normalizer_folder = f'../data/normalized/{source}/'
+        normalizer_folder = f'../result/normalized/{source}/'
         res_path = f'{normalizer_folder}{file_name}.jsonl'
         if not os.path.exists(normalizer_folder):
             os.makedirs(normalizer_folder)
