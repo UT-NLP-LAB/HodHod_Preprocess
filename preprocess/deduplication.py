@@ -1,18 +1,55 @@
-import gc
 import json
-import math
 import os
-from multiprocessing import Pool, cpu_count
-from tqdm import tqdm
+import time
+from collections import defaultdict
+from multiprocessing import cpu_count, Queue, Process
 from datasketch import MinHash
 import re
 import string
 from nltk import ngrams
+from datasketch.lean_minhash import LeanMinHash
+import queue
+from more_itertools import divide
+from .utils import get_all_files, get_out_file
+import networkit as nk
+from glob import glob
+from tqdm import tqdm
+
+
+def _h_bytes(hs):
+    return bytes(hs.byteswap().data)
+
+
+def construct_graph(set_of_duplicate_pairs):
+    graph = nk.Graph()
+    mapper = {}
+    for pair in tqdm(set_of_duplicate_pairs):
+        node1_name, node2_name = pair
+        if node1_name not in mapper:
+            mapper[node1_name] = graph.addNode()
+        if node2_name not in mapper:
+            mapper[node2_name] = graph.addNode()
+        graph.addEdge(mapper[node1_name], mapper[node2_name])
+    return graph, mapper
+
+
+def find_connected_components(graph):
+    cc = nk.components.ConnectedComponents(graph)
+    cc.run()
+    return cc.getComponents(), cc.numberOfComponents()
 
 
 class Deduplication:
     def __init__(self):
-        pass
+        self.lsh_folder = ""
+        self.BAND = 9
+        self.doc_queues = [Queue(1000000) for _ in range(self.BAND)]
+        self.lsh_dicts = [defaultdict(list) for _ in range(self.BAND)]
+        self.width = 13
+        self.range = 25
+        self.lsh_out = ""
+        self.duplicates = defaultdict()
+        self.data_path = "../result/normalized/"
 
     def get_features(self, s: str):
         # lower cased
@@ -22,49 +59,131 @@ class Deduplication:
         s = s.replace(":><؟!.،,?", "")
         # remove consecutive spaces, newlines, tabs in the middle and in the beginning / end
         s = re.sub(r"\s+", " ", s.strip())
-        return map(lambda x: "".join(x), ngrams(s, 6))
+        return map(lambda x: "".join(x), ngrams(s, self.width))
 
-    def preprocess_file(self, file_path: str):
-        file_name = os.path.splitext(os.path.basename(file_path))[0]
-        source = os.path.basename(os.path.dirname(file_path))
-        file_type = os.path.splitext(file_path)[-1]
-        hash_folder = f'../result/minhash_nfc/{source}/'
-        res_path = f'{hash_folder}{file_name}.jsonl'
-        if not os.path.exists(hash_folder):
-            os.makedirs(hash_folder)
-        with open(file_path, 'r', encoding='utf-8') as fh:
-            with open(res_path, 'w', encoding='utf-8') as f:
+    def generate_hash(self, file_paths: list[str]):
+        for file_path in tqdm(file_paths, total=len(file_paths)):
+            file_type = os.path.splitext(file_path)[-1]
+            with open(file_path, 'r', encoding='utf-8') as fh:
                 if file_type == '.jsonl':
-                    for line in tqdm(fh):
+                    for line in fh:
                         json_data = json.loads(line)
                         map_text = self.get_features(json_data['text'])
                         mini_hash = MinHash(num_perm=128)
-                        hash_text = [mini_hash.update(x.encode('utf8')) for x in map_text]
-                        json_data['hash'] = mini_hash
-                        json_data['source'] = source
-                        json.dump(json_data, f, ensure_ascii=False)
-                        f.write('\n')
-        return True
+                        [mini_hash.update(x.encode('utf8')) for x in map_text]
+                        lean_minhash = LeanMinHash(mini_hash)
+                        for i, doc_queue in enumerate(self.doc_queues):
+                            if (i + 1) * self.range < len(lean_minhash.hashvalues):
+                                h_bytes = _h_bytes(lean_minhash.hashvalues[i * self.range: (i + 1) * self.range])
+                                doc_queue.put((f'{file_path}@{json_data['id']}', h_bytes))
+
+    def lsh(self, doc_queue, lsh_dict, idx):
+        i = 0
+        with open(f'{self.lsh_folder}/deduplication{idx}.txt', 'w', encoding='utf-8') as f:
+            while True:
+                try:
+                    key, h_bytes = doc_queue.get(timeout=30)
+                    cand = lsh_dict.get(h_bytes, "None")
+                    lsh_dict[str(idx) + str(h_bytes)].append(key)
+                    if cand != "None":
+                        f.write(f'{key} :: {cand}\n')
+                    else:
+                        lsh_dict[h_bytes] = key
+                    i += 1
+                    if i % 10000 == 0:
+                        print(f"process {idx}: {i} passed")
+                except queue.Empty:
+                    print(f"process {idx}: Done")
+                    break
+        print(f"Total number of documents: {i}")
+
+    def generate_pairs(self, all_files: list[str]):
+        n_proc = cpu_count()
+        parts = divide(n_proc, all_files)
+        print(f"resetting to {n_proc} for number of processes")
+        processes = []
+
+        for process_id in range(n_proc):
+            p = Process(
+                target=self.generate_hash,
+                args=(list(parts[process_id]),),
+            )
+            processes.append(p)
+            p.start()
+        # [process.join() for process in processes]
+        # processes = []
+        for process_id in range(self.BAND):
+            p = Process(
+                target=self.lsh,
+                args=(self.doc_queues[process_id], self.lsh_dicts[process_id], process_id,),
+            )
+            processes.append(p)
+            p.start()
+        [process.join() for process in processes]
+
+        return self.lsh_dicts
+
+    def generate_connected_components_mp(self):
+        start = time.time()
+        files = glob(f"{self.lsh_folder}/*")
+        print("Started graph building")
+        set_of_duplicate_pairs = set()
+        for fp in files:
+            with open(fp, "r", encoding='utf-8') as f:
+                for line in tqdm(f):
+                    pair = tuple(line.strip().split(" :: "))
+                    if pair[0] != pair[1]:
+                        set_of_duplicate_pairs.add(pair)
+        print(
+            "length of the set of duplicates:",
+            len(set_of_duplicate_pairs),
+        )
+
+        # generate a graph using id's as nodes and a pair of ids as an edge
+        nk.setNumberOfThreads(60)
+        graph, mapper = construct_graph(set_of_duplicate_pairs)
+        components, n_components = find_connected_components(graph)
+        print("number of connected components:", n_components, time.time() - start)
+
+        reversed_mapper = {value: key for key, value in mapper.items()}
+        print("Graph generated duplicates list!!!", time.time() - start)
+
+        duplicates = defaultdict(set)
+        n_duplicate_docs = 0
+        for component in tqdm(components):
+            for j in range(1, len(component)):
+                doc = reversed_mapper[component[j]]
+                file_name, doc_idx = doc.split("@")
+                duplicates[file_name].add(str(doc_idx))
+                n_duplicate_docs += 1
+        print(
+            "number of duplicate documents that will be removed:", n_duplicate_docs
+        )
+        return duplicates
 
     def preprocess_files(self, data_dir: str):
-        files = sorted(os.listdir(data_dir))
-        files = [data_dir + "/" + file for file in files if os.path.isfile(data_dir + "/" + file)]
-        n_proc = cpu_count()
-        n_chunks = math.ceil(len(files) / n_proc)
-        remain = len(files) % n_proc
-        if n_chunks == 1 and remain:
-            n_proc = remain
-        print(f"resetting to {n_proc} for number of processes")
-        # files = [files[i: i + n_chunks] for i in range(0, len(files), n_chunks)]
-
-        with Pool(processes=n_proc) as pool:
-            pbar = tqdm(
-                pool.imap(
-                    self.preprocess_file, files
-                ),
-                total=len(files),
-            )
-            for test in pbar:
-                pbar.update()
-                if test:
-                    continue
+        all_files = get_all_files(data_dir)
+        self.lsh_folder = get_out_file(all_files, '../result/lsh/')
+        res_folder = '../result/deduplication'
+        if not os.path.exists(res_folder):
+            os.makedirs(res_folder)
+        self.generate_pairs(all_files)
+        duplicates = self.generate_connected_components_mp()
+        for file_path in tqdm(all_files, total=len(all_files)):
+            file_type = os.path.splitext(file_path)[-1]
+            with open(file_path, 'r', encoding='utf-8') as fh:
+                if file_type == '.jsonl':
+                    res_path = f'{res_folder}/{file_path.split(self.data_path)[1]}'
+                    if not os.path.exists(os.path.dirname(res_path)):
+                        os.makedirs(os.path.dirname(res_path))
+                    with open(res_path, 'w', encoding='utf-8') as f:
+                        for line in fh:
+                            json_data = json.loads(line)
+                            if json_data['id'] not in duplicates[file_path]:
+                                json.dump(json_data, f, ensure_ascii=False)
+                                f.write('\n')
+        log_name = data_dir.split(self.data_path)[1]
+        start_time = time.time()
+        log_path = f'../result/logs/{log_name}.txt'
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(f"Deduplication Time: {time.time() - start_time:.3f}\n")
