@@ -12,6 +12,7 @@ from spacy.lang.en import English
 import csv
 import string
 from .utils import get_all_files
+from collections import Counter
 
 
 class Preprocessor:
@@ -48,6 +49,26 @@ class Preprocessor:
         percentage = (persian_chars / total_chars) * 100 if total_chars > 0 else 0
         return percentage > self.char_threshold
 
+    def most_repeated_word_over_threshold(self, text):
+        # Tokenize the text into words
+        words = re.findall(r'\b\w+\b', text)
+        # Count the frequency of each word
+        word_counts = Counter(words)
+        if not word_counts:
+            return False
+        # Find the word with the maximum frequency
+        most_common_word, max_count = word_counts.most_common(1)[0]
+        # Calculate the percentage of the text occupied by this word
+        percentage = (max_count / len(words)) * 100
+        return percentage < self.threshold
+
+    def check_short_lines(self, text):
+        lines = text.split('\n')
+        short_line_count = sum(1 for line in lines if len(line.strip()) < 15)
+        total_line_count = len(lines)
+        portion_short_lines = (short_line_count / total_line_count) * 100
+        return portion_short_lines < self.threshold
+
     def preprocess_line(self, text: str):
         text = self.normalizer.normalize(text)
         text = re.sub(r'\b[A-Z]+\b', '', text)
@@ -65,8 +86,8 @@ class Preprocessor:
     def write_json(self, json_data, f):
         if self.filtering:
             is_clean_text, s = self.get_features(json_data['text'])
-            is_persian_text = self.is_persian_text(s)
-            if is_clean_text and is_persian_text:
+            if is_clean_text and self.is_persian_text(s) and self.check_short_lines(
+                    s) and self.most_repeated_word_over_threshold(s):
                 json.dump(json_data, f, ensure_ascii=False)
                 f.write('\n')
         else:
@@ -87,9 +108,11 @@ class Preprocessor:
                     for i, line in tqdm(enumerate(fh)):
                         json_data = json.loads(line)
                         json_data['id'] = f"{source}-{file_name}-{i}"
-                        json_data['text'] = self.preprocess_document(json_data['text'])
-                        json_data['source'] = source
-                        self.write_json(json_data, f)
+                        preprocessed_text = self.preprocess_document(json_data['text'])
+                        if preprocessed_text:
+                            json_data['text'] = preprocessed_text
+                            json_data['source'] = source
+                            self.write_json(json_data, f)
                 elif file_type == '.json':
                     json_datas = json.load(fh)
                     for i, json_data in tqdm(enumerate(json_datas)):
@@ -133,6 +156,8 @@ class Preprocessor:
             f.write(f"Total files: {len(all_files)}\n")
         self.filtering = filtering
         self.normalize_files(all_files)
+        count_words_filtered = 0
+        number_of_total_rows = 0
         count_words = 0
         for file_path in all_files:
             file_name = os.path.splitext(os.path.basename(file_path))[0].replace(" ", "")
@@ -142,10 +167,15 @@ class Preprocessor:
             with open(res_path, 'r', encoding='utf-8') as fh:
                 for line in fh.readlines():
                     self.number_of_filtered_rows += 1
+                    count_words_filtered += len(line.split())
+            with open(file_path, 'r', encoding='utf-8') as fh:
+                for line in fh.readlines():
+                    number_of_total_rows += 1
                     count_words += len(line.split())
 
         with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(f"Number of words: {count_words}\n")
-            f.write(f"Filtered rows: {self.number_of_filtered_rows}\n")
+            f.write(f"Number of words before filtering: {count_words}\n")
+            f.write(f"Number of rows before filtering: : {number_of_total_rows}\n---------------------------\n")
+            f.write(f"Number of words after filtering: {count_words_filtered}\n")
+            f.write(f"Number of rows after filtering: : {self.number_of_filtered_rows}\n")
             f.write(f"Normalizing Time: {(time.time() - start_time):.3f} s\n---------------------------\n")
-
