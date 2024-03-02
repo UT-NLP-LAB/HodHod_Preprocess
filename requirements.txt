@@ -1,0 +1,9 @@
+tqdm~=4.66.1
+datasketch~=1.6.4
+nltk~=3.8.1
+piraye==0.4.0
+spacy~=3.7.2
+more-itertools~=10.2.0
+networkit~=11.0
+pandas~=2.2.1
+beautifulsoup4~=4.12.3
