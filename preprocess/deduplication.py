@@ -6,7 +6,6 @@ from multiprocessing import cpu_count, Queue, Process
 from datasketch import MinHash
 import re
 import string
-from nltk import ngrams
 from datasketch.lean_minhash import LeanMinHash
 import queue
 from more_itertools import divide
@@ -39,6 +38,17 @@ def find_connected_components(graph):
     return cc.getComponents(), cc.numberOfComponents()
 
 
+def get_features(s: str):
+    # lower cased
+    s = s.lower()
+    # remove punctuation
+    s = s.translate(str.maketrans("", "", string.punctuation))
+    s = s.replace(":><؟!.،,?", "")
+    # remove consecutive spaces, newlines, tabs in the middle and in the beginning / end
+    s = re.sub(r"\s+", " ", s.strip())
+    return s.split()
+
+
 class Deduplication:
     def __init__(self):
         self.lsh_folder = ""
@@ -51,16 +61,6 @@ class Deduplication:
         self.duplicates = defaultdict()
         self.data_path = "../result/normalized/"
 
-    def get_features(self, s: str):
-        # lower cased
-        s = s.lower()
-        # remove punctuation
-        s = s.translate(str.maketrans("", "", string.punctuation))
-        s = s.replace(":><؟!.،,?", "")
-        # remove consecutive spaces, newlines, tabs in the middle and in the beginning / end
-        s = re.sub(r"\s+", " ", s.strip())
-        return map(lambda x: "".join(x), ngrams(s, self.width))
-
     def generate_hash(self, file_paths: list[str]):
         for file_path in tqdm(file_paths, total=len(file_paths)):
             file_type = os.path.splitext(file_path)[-1]
@@ -68,7 +68,7 @@ class Deduplication:
                 if file_type == '.jsonl':
                     for line in fh:
                         json_data = json.loads(line)
-                        map_text = self.get_features(json_data['text'])
+                        map_text = get_features(json_data['text'])
                         mini_hash = MinHash(num_perm=128)
                         [mini_hash.update(x.encode('utf8')) for x in map_text]
                         lean_minhash = LeanMinHash(mini_hash)
@@ -123,7 +123,7 @@ class Deduplication:
 
         return self.lsh_dicts
 
-    def generate_connected_components_mp(self):
+    def generate_connected_components_mp(self, log_file):
         start = time.time()
         files = glob(f"{self.lsh_folder}/*")
         print("Started graph building")
@@ -134,19 +134,16 @@ class Deduplication:
                     pair = tuple(line.strip().split(" :: "))
                     if pair[0] != pair[1]:
                         set_of_duplicate_pairs.add(pair)
-        print(
-            "length of the set of duplicates:",
-            len(set_of_duplicate_pairs),
-        )
+        log_file.write(f"length of the set of duplicates: {len(set_of_duplicate_pairs)}\n")
 
         # generate a graph using id's as nodes and a pair of ids as an edge
         nk.setNumberOfThreads(60)
         graph, mapper = construct_graph(set_of_duplicate_pairs)
         components, n_components = find_connected_components(graph)
-        print("number of connected components:", n_components, time.time() - start)
+        log_file.write(f"number of connected components: {n_components}, {time.time() - start:.3f}s\n")
 
         reversed_mapper = {value: key for key, value in mapper.items()}
-        print("Graph generated duplicates list!!!", time.time() - start)
+        log_file.write(f"Graph generated duplicates list!!!: {time.time() - start:.3f}s\n")
 
         duplicates = defaultdict(set)
         n_duplicate_docs = 0
@@ -156,34 +153,39 @@ class Deduplication:
                 file_name, doc_idx = doc.split("@")
                 duplicates[file_name].add(str(doc_idx))
                 n_duplicate_docs += 1
-        print(
-            "number of duplicate documents that will be removed:", n_duplicate_docs
-        )
+
+        log_file.write(f"number of duplicate documents that will be removed:{n_duplicate_docs}\n")
         return duplicates
 
     def preprocess_files(self, data_dir: str):
+        start_time = time.time()
         all_files = get_all_files(data_dir)
         self.lsh_folder = get_out_file(all_files, '../result/lsh/')
         res_folder = '../result/deduplication'
         if not os.path.exists(res_folder):
             os.makedirs(res_folder)
         self.generate_pairs(all_files)
-        duplicates = self.generate_connected_components_mp()
-        for file_path in tqdm(all_files, total=len(all_files)):
-            file_type = os.path.splitext(file_path)[-1]
-            with open(file_path, 'r', encoding='utf-8') as fh:
-                if file_type == '.jsonl':
-                    res_path = f'{res_folder}/{file_path.split(self.data_path)[1]}'
-                    if not os.path.exists(os.path.dirname(res_path)):
-                        os.makedirs(os.path.dirname(res_path))
-                    with open(res_path, 'w', encoding='utf-8') as f:
-                        for line in fh:
-                            json_data = json.loads(line)
-                            if json_data['id'] not in duplicates[file_path]:
-                                json.dump(json_data, f, ensure_ascii=False)
-                                f.write('\n')
         log_name = data_dir.split(self.data_path)[1]
-        start_time = time.time()
         log_path = f'../result/logs/{log_name}.txt'
-        with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(f"Deduplication Time: {time.time() - start_time:.3f}\n")
+        total_rows = 0
+        total_words = 0
+        with open(log_path, 'a', encoding='utf-8') as log_file:
+            duplicates = self.generate_connected_components_mp(log_file)
+            for file_path in tqdm(all_files, total=len(all_files)):
+                file_type = os.path.splitext(file_path)[-1]
+                with open(file_path, 'r', encoding='utf-8') as fh:
+                    if file_type == '.jsonl':
+                        res_path = f'{res_folder}/{file_path.split(self.data_path)[1]}'
+                        if not os.path.exists(os.path.dirname(res_path)):
+                            os.makedirs(os.path.dirname(res_path))
+                        with open(res_path, 'w', encoding='utf-8') as result_file:
+                            for line in fh:
+                                json_data = json.loads(line)
+                                if json_data['id'] not in duplicates[file_path]:
+                                    json.dump(json_data, result_file, ensure_ascii=False)
+                                    total_rows += 1
+                                    total_words += len(json_data['text'].split())
+                                    result_file.write('\n')
+            log_file.write(f"Number of words: {total_words}\n")
+            log_file.write(f"Filtered rows: {total_rows}\n")
+            log_file.write(f"Deduplication Time: {time.time() - start_time:.3f}\n")

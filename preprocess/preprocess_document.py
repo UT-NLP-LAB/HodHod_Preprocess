@@ -133,14 +133,19 @@ class Preprocessor:
             f.write(f"Total files: {len(all_files)}\n")
         self.filtering = filtering
         self.normalize_files(all_files)
+        count_words = 0
         for file_path in all_files:
             file_name = os.path.splitext(os.path.basename(file_path))[0].replace(" ", "")
             source = os.path.dirname(file_path.split(self.data_path)[1])
             self.normalized_folder = f'../result/normalized/{source}'
             res_path = f'{self.normalized_folder}/{file_name}.jsonl'
             with open(res_path, 'r', encoding='utf-8') as fh:
-                self.number_of_filtered_rows += sum(1 for _ in fh)
+                for line in fh.readlines():
+                    self.number_of_filtered_rows += 1
+                    count_words += len(line.split())
+
         with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(f"Number of words: {count_words}\n")
             f.write(f"Filtered rows: {self.number_of_filtered_rows}\n")
             f.write(f"Normalizing Time: {(time.time() - start_time):.3f} s\n---------------------------\n")
 
