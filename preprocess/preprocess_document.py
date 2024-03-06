@@ -39,7 +39,7 @@ class Preprocessor:
     def get_features(self, s: str):
         s = s.lower()
         s = s.translate(str.maketrans("", "", string.punctuation))
-        s = s.replace(":><؟!.،,?", "")
+        s = s.translate(str.maketrans("", "", ":><؟!.،,?"))
         s = re.sub(r"\s+", " ", s.strip())
         return len(s.split()) > self.threshold, s
 
@@ -73,6 +73,7 @@ class Preprocessor:
         text = self.normalizer.normalize(text)
         text = re.sub(r'\b[A-Z]+\b', '', text)
         text = re.sub(r'<[^>]+>', '', text)
+        text = text.translate(str.maketrans("", "", "‎‏‪‫ ‭‮"))
         sents = [sen for sen in self.tokenizer.sentence_tokenize(text)]
         list_of_sentences = [[str(token) for token in self.spacy_tokenizer(sen)] for sen in sents]
         tokens = [item for sublist in list_of_sentences for item in sublist]
