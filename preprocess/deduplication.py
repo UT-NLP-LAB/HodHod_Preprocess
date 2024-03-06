@@ -170,13 +170,14 @@ class Deduplication:
         log_path = f'./result/logs/{log_name}.txt'
         total_rows = 0
         total_words = 0
+        idx = 0
         with open(log_path, 'a', encoding='utf-8') as log_file:
-            res_path = f'{res_folder}/{sub_folder_name}/{sub_folder_name}.jsonl'
-            if not os.path.exists(os.path.dirname(res_path)):
-                os.makedirs(os.path.dirname(res_path))
-            with open(res_path, 'w', encoding='utf-8') as result_file:
-                duplicates = self.generate_connected_components_mp(log_file)
-                for file_path in tqdm(all_files, total=len(all_files)):
+            duplicates = self.generate_connected_components_mp(log_file)
+            for file_path in tqdm(all_files, total=len(all_files)):
+                res_path = f'{res_folder}/{sub_folder_name}/{sub_folder_name}{str(idx)}.jsonl'
+                if not os.path.exists(os.path.dirname(res_path)):
+                    os.makedirs(os.path.dirname(res_path))
+                with open(res_path, 'w', encoding='utf-8') as result_file:
                     with open(file_path, 'r', encoding='utf-8') as fh:
                         for line in fh:
                             json_data = json.loads(line)
@@ -185,6 +186,8 @@ class Deduplication:
                                 total_rows += 1
                                 total_words += len(json_data['text'].split())
                                 result_file.write('\n')
+                                if total_rows % 800000 == 799999:
+                                    idx += 1
             log_file.write(f"Number of words: {total_words}\n")
             log_file.write(f"Filtered rows: {total_rows}\n")
             log_file.write(f"Deduplication Time: {time.time() - start_time:.3f}\n")
