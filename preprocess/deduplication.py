@@ -75,7 +75,7 @@ class Deduplication:
                         for i, doc_queue in enumerate(self.doc_queues):
                             if (i + 1) * self.range < len(lean_minhash.hashvalues):
                                 h_bytes = _h_bytes(lean_minhash.hashvalues[i * self.range: (i + 1) * self.range])
-                                doc_queue.put((f'{file_path}@{json_data['id']}', h_bytes))
+                                doc_queue.put((f'{file_path}@{json_data["id"]}', h_bytes))
 
     def lsh(self, doc_queue, lsh_dict, idx):
         i = 0
