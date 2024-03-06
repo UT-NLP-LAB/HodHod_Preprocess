@@ -106,28 +106,37 @@ class Preprocessor:
             with open(res_path, 'w', encoding='utf-8') as f:
                 if file_type == '.jsonl':
                     for i, line in enumerate(fh):
-                        json_data = json.loads(line)
-                        json_data['id'] = f"{source}-{file_name}-{i}"
-                        preprocessed_text = self.preprocess_document(json_data['text'])
-                        if preprocessed_text:
-                            json_data['text'] = preprocessed_text
+                        try:
+                            json_data = json.loads(line)
+                            json_data['id'] = f"{source}-{file_name}-{i}"
+                            preprocessed_text = self.preprocess_document(json_data['text'])
+                            if preprocessed_text:
+                                json_data['text'] = preprocessed_text
+                                json_data['source'] = source
+                                self.write_json(json_data, f)
+                        except json.decoder.JSONDecodeError as e:
+                            print("Error in reading file: ", file_path)
+                elif file_type == '.json':
+                    try:
+                        json_datas = json.load(fh)
+                        for i, json_data in enumerate(json_datas):
+                            json_data['id'] = f"{source}-{file_name}-{i}"
+                            json_data['text'] = self.preprocess_line(json_data['text'])
                             json_data['source'] = source
                             self.write_json(json_data, f)
-                elif file_type == '.json':
-                    json_datas = json.load(fh)
-                    for i, json_data in enumerate(json_datas):
-                        json_data['id'] = f"{source}-{file_name}-{i}"
-                        json_data['text'] = self.preprocess_line(json_data['text'])
-                        json_data['source'] = source
-                        self.write_json(json_data, f)
+                    except json.decoder.JSONDecodeError as e:
+                        print("Error in reading file: ", file_path)
                 elif file_type == '.csv':
-                    csv_reader = csv.reader(fh)
-                    columns = next(csv_reader)
-                    for i, row in enumerate(csv_reader):
-                        json_data = {'id': f"{source}-{file_name}-{i}"}
-                        for index in range(len(columns)):
-                            json_data[columns[index]] = row[index]
-                        self.write_json(json_data, f)
+                    try:
+                        csv_reader = csv.reader(fh)
+                        columns = next(csv_reader)
+                        for i, row in enumerate(csv_reader):
+                            json_data = {'id': f"{source}-{file_name}-{i}"}
+                            for index in range(len(columns)):
+                                json_data[columns[index]] = row[index]
+                            self.write_json(json_data, f)
+                    except:
+                        print("Error in reading file: ", file_path)
         return self.normalized_folder
 
     def normalize_files(self, all_files: list[str]):
