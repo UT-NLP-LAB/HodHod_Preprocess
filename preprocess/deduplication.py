@@ -9,7 +9,7 @@ import string
 from datasketch.lean_minhash import LeanMinHash
 import queue
 from more_itertools import divide
-from .utils import get_all_files, get_out_file
+from .utils import get_all_files
 import networkit as nk
 from glob import glob
 from tqdm import tqdm
@@ -22,7 +22,7 @@ def _h_bytes(hs):
 def construct_graph(set_of_duplicate_pairs):
     graph = nk.Graph()
     mapper = {}
-    for pair in tqdm(set_of_duplicate_pairs):
+    for pair in set_of_duplicate_pairs:
         node1_name, node2_name = pair
         if node1_name not in mapper:
             mapper[node1_name] = graph.addNode()
@@ -63,19 +63,17 @@ class Deduplication:
 
     def generate_hash(self, file_paths: list[str]):
         for file_path in tqdm(file_paths, total=len(file_paths)):
-            file_type = os.path.splitext(file_path)[-1]
             with open(file_path, 'r', encoding='utf-8') as fh:
-                if file_type == '.jsonl':
-                    for line in fh:
-                        json_data = json.loads(line)
-                        map_text = get_features(json_data['text'])
-                        mini_hash = MinHash(num_perm=128)
-                        [mini_hash.update(x.encode('utf8')) for x in map_text]
-                        lean_minhash = LeanMinHash(mini_hash)
-                        for i, doc_queue in enumerate(self.doc_queues):
-                            if (i + 1) * self.range < len(lean_minhash.hashvalues):
-                                h_bytes = _h_bytes(lean_minhash.hashvalues[i * self.range: (i + 1) * self.range])
-                                doc_queue.put((f'{file_path}@{json_data["id"]}', h_bytes))
+                for line in fh:
+                    json_data = json.loads(line)
+                    map_text = get_features(json_data['text'])
+                    mini_hash = MinHash(num_perm=128)
+                    [mini_hash.update(x.encode('utf8')) for x in map_text]
+                    lean_minhash = LeanMinHash(mini_hash)
+                    for i, doc_queue in enumerate(self.doc_queues):
+                        if (i + 1) * self.range < len(lean_minhash.hashvalues):
+                            h_bytes = _h_bytes(lean_minhash.hashvalues[i * self.range: (i + 1) * self.range])
+                            doc_queue.put((f'{file_path}@{json_data["id"]}', h_bytes))
 
     def lsh(self, doc_queue, lsh_dict, idx):
         i = 0
@@ -130,7 +128,7 @@ class Deduplication:
         set_of_duplicate_pairs = set()
         for fp in files:
             with open(fp, "r", encoding='utf-8') as f:
-                for line in tqdm(f):
+                for line in f:
                     pair = tuple(line.strip().split(" :: "))
                     if pair[0] != pair[1]:
                         set_of_duplicate_pairs.add(pair)
@@ -147,7 +145,7 @@ class Deduplication:
 
         duplicates = defaultdict(set)
         n_duplicate_docs = 0
-        for component in tqdm(components):
+        for component in components:
             for j in range(1, len(component)):
                 doc = reversed_mapper[component[j]]
                 file_name, doc_idx = doc.split("@")
@@ -162,6 +160,8 @@ class Deduplication:
         data_dir = self.data_path + sub_folder_name
         all_files = get_all_files(data_dir)
         self.lsh_folder = f'./result/lsh/{sub_folder_name}'
+        if not os.path.exists(self.lsh_folder):
+            os.makedirs(self.lsh_folder)
         res_folder = './result/deduplication'
         if not os.path.exists(res_folder):
             os.makedirs(res_folder)
@@ -171,22 +171,20 @@ class Deduplication:
         total_rows = 0
         total_words = 0
         with open(log_path, 'a', encoding='utf-8') as log_file:
-            duplicates = self.generate_connected_components_mp(log_file)
-            for file_path in tqdm(all_files, total=len(all_files)):
-                file_type = os.path.splitext(file_path)[-1]
-                with open(file_path, 'r', encoding='utf-8') as fh:
-                    if file_type == '.jsonl':
-                        res_path = f'{res_folder}/{file_path.split(self.data_path)[1]}'
-                        if not os.path.exists(os.path.dirname(res_path)):
-                            os.makedirs(os.path.dirname(res_path))
-                        with open(res_path, 'w', encoding='utf-8') as result_file:
-                            for line in fh:
-                                json_data = json.loads(line)
-                                if json_data['id'] not in duplicates[file_path]:
-                                    json.dump(json_data, result_file, ensure_ascii=False)
-                                    total_rows += 1
-                                    total_words += len(json_data['text'].split())
-                                    result_file.write('\n')
+            res_path = f'{res_folder}/{sub_folder_name}/{sub_folder_name}.jsonl'
+            if not os.path.exists(os.path.dirname(res_path)):
+                os.makedirs(os.path.dirname(res_path))
+            with open(res_path, 'w', encoding='utf-8') as result_file:
+                duplicates = self.generate_connected_components_mp(log_file)
+                for file_path in tqdm(all_files, total=len(all_files)):
+                    with open(file_path, 'r', encoding='utf-8') as fh:
+                        for line in fh:
+                            json_data = json.loads(line)
+                            if json_data['id'] not in duplicates[file_path]:
+                                json.dump(json_data, result_file, ensure_ascii=False)
+                                total_rows += 1
+                                total_words += len(json_data['text'].split())
+                                result_file.write('\n')
             log_file.write(f"Number of words: {total_words}\n")
             log_file.write(f"Filtered rows: {total_rows}\n")
             log_file.write(f"Deduplication Time: {time.time() - start_time:.3f}\n")
