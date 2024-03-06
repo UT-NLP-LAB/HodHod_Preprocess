@@ -27,7 +27,7 @@ class Preprocessor:
         self.tokenizer = NltkTokenizer()
         self.nlp = English()
         self.spacy_tokenizer = self.nlp.tokenizer
-        self.data_path = "../data/"
+        self.data_path = "data/"
 
         self.threshold = threshold
         self.char_threshold = char_threshold
@@ -98,14 +98,14 @@ class Preprocessor:
         file_name = os.path.splitext(os.path.basename(file_path))[0].replace(" ", "")
         file_type = os.path.splitext(file_path)[-1]
         source = os.path.dirname(file_path.split(self.data_path)[1])
-        self.normalized_folder = f'../result/normalized/{source}'
+        self.normalized_folder = f'./result/normalized/{source}'
         res_path = f'{self.normalized_folder}/{file_name}.jsonl'
         if not os.path.exists(self.normalized_folder):
             os.makedirs(self.normalized_folder)
         with open(file_path, 'r', encoding='utf-8') as fh:
             with open(res_path, 'w', encoding='utf-8') as f:
                 if file_type == '.jsonl':
-                    for i, line in tqdm(enumerate(fh)):
+                    for i, line in enumerate(fh):
                         json_data = json.loads(line)
                         json_data['id'] = f"{source}-{file_name}-{i}"
                         preprocessed_text = self.preprocess_document(json_data['text'])
@@ -115,7 +115,7 @@ class Preprocessor:
                             self.write_json(json_data, f)
                 elif file_type == '.json':
                     json_datas = json.load(fh)
-                    for i, json_data in tqdm(enumerate(json_datas)):
+                    for i, json_data in enumerate(json_datas):
                         json_data['id'] = f"{source}-{file_name}-{i}"
                         json_data['text'] = self.preprocess_line(json_data['text'])
                         json_data['source'] = source
@@ -123,7 +123,7 @@ class Preprocessor:
                 elif file_type == '.csv':
                     csv_reader = csv.reader(fh)
                     columns = next(csv_reader)
-                    for i, row in tqdm(enumerate(csv_reader)):
+                    for i, row in enumerate(csv_reader):
                         json_data = {'id': f"{source}-{file_name}-{i}"}
                         for index in range(len(columns)):
                             json_data[columns[index]] = row[index]
@@ -149,10 +149,10 @@ class Preprocessor:
         start_time = time.time()
         data_dir = self.data_path + sub_folder_name
         all_files = get_all_files(data_dir)
-        log_name = data_dir.split(self.data_path)[1]
-        log_path = f'../result/logs/{log_name}.txt'
-        if not os.path.exists('../result/logs'):
-            os.makedirs('../result/logs')
+        log_name = sub_folder_name
+        log_path = f'./result/logs/{log_name}.txt'
+        if not os.path.exists('./result/logs'):
+            os.makedirs('./result/logs')
         with open(log_path, 'w', encoding='utf-8') as f:
             f.write(f"Total files: {len(all_files)}\n")
         self.filtering = filtering
@@ -160,10 +160,11 @@ class Preprocessor:
         count_words_filtered = 0
         number_of_total_rows = 0
         count_words = 0
+        print("total : ", len(all_files))
         for file_path in all_files:
             file_name = os.path.splitext(os.path.basename(file_path))[0].replace(" ", "")
             source = os.path.dirname(file_path.split(self.data_path)[1])
-            self.normalized_folder = f'../result/normalized/{source}'
+            self.normalized_folder = f'./result/normalized/{source}'
             res_path = f'{self.normalized_folder}/{file_name}.jsonl'
             with open(res_path, 'r', encoding='utf-8') as fh:
                 for line in fh.readlines():

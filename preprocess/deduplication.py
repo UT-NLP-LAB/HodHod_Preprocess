@@ -59,7 +59,7 @@ class Deduplication:
         self.range = 25
         self.lsh_out = ""
         self.duplicates = defaultdict()
-        self.data_path = "../result/normalized/"
+        self.data_path = "result/normalized/"
 
     def generate_hash(self, file_paths: list[str]):
         for file_path in tqdm(file_paths, total=len(file_paths)):
@@ -161,13 +161,13 @@ class Deduplication:
         start_time = time.time()
         data_dir = self.data_path + sub_folder_name
         all_files = get_all_files(data_dir)
-        self.lsh_folder = get_out_file(all_files, '../result/lsh/')
-        res_folder = '../result/deduplication'
+        self.lsh_folder = f'./result/lsh/{sub_folder_name}'
+        res_folder = './result/deduplication'
         if not os.path.exists(res_folder):
             os.makedirs(res_folder)
         self.generate_pairs(all_files)
         log_name = data_dir.split(self.data_path)[1]
-        log_path = f'../result/logs/{log_name}.txt'
+        log_path = f'./result/logs/{log_name}.txt'
         total_rows = 0
         total_words = 0
         with open(log_path, 'a', encoding='utf-8') as log_file:
