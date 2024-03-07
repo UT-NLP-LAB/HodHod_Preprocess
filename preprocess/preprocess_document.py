@@ -16,7 +16,7 @@ from collections import Counter
 
 
 class Preprocessor:
-    def __init__(self, threshold=50, char_threshold=55):
+    def __init__(self, threshold=30, char_threshold=35, min_threshold = 50):
         self.log_path = None
         self.normalizer = NormalizerBuilder(
             [Config.PUNCTUATION_FA, Config.ALPHABET_FA, Config.DIGIT_FA, Config.ALPHABET_EN, Config.DIGIT_EN,
@@ -30,6 +30,7 @@ class Preprocessor:
         self.data_path = "data/"
 
         self.threshold = threshold
+        self.min_threshold = min_threshold
         self.char_threshold = char_threshold
         self.normalized_folder = ""
         self.number_of_total_rows = 0
@@ -60,14 +61,14 @@ class Preprocessor:
         most_common_word, max_count = word_counts.most_common(1)[0]
         # Calculate the percentage of the text occupied by this word
         percentage = (max_count / len(words)) * 100
-        return percentage < self.threshold
+        return percentage < self.min_threshold
 
     def check_short_lines(self, text):
         lines = text.split('\n')
         short_line_count = sum(1 for line in lines if len(line.strip()) < 15)
         total_line_count = len(lines)
         portion_short_lines = (short_line_count / total_line_count) * 100
-        return portion_short_lines < self.threshold
+        return portion_short_lines < self.min_threshold
 
     def preprocess_line(self, text: str):
         text = self.normalizer.normalize(text)
@@ -171,7 +172,7 @@ class Preprocessor:
         number_of_total_rows = 0
         count_words = 0
         print("total : ", len(all_files))
-        for file_path in all_files:
+        for file_path in tqdm(all_files):
             file_name = os.path.splitext(os.path.basename(file_path))[0].replace(" ", "")
             source = os.path.dirname(file_path.split(self.data_path)[1])
             self.normalized_folder = f'./result/normalized/{source}'
