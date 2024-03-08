@@ -16,7 +16,7 @@ from collections import Counter
 
 
 class Preprocessor:
-    def __init__(self, threshold=30, char_threshold=35, min_threshold = 50):
+    def __init__(self, threshold=30, char_threshold=35, min_threshold=50):
         self.log_path = None
         self.normalizer = NormalizerBuilder(
             [Config.PUNCTUATION_FA, Config.ALPHABET_FA, Config.DIGIT_FA, Config.ALPHABET_EN, Config.DIGIT_EN,
@@ -169,8 +169,6 @@ class Preprocessor:
         self.filtering = filtering
         self.normalize_files(all_files)
         count_words_filtered = 0
-        number_of_total_rows = 0
-        count_words = 0
         print("total : ", len(all_files))
         for file_path in tqdm(all_files):
             file_name = os.path.splitext(os.path.basename(file_path))[0].replace(" ", "")
@@ -178,17 +176,14 @@ class Preprocessor:
             self.normalized_folder = f'./result/normalized/{source}'
             res_path = f'{self.normalized_folder}/{file_name}.jsonl'
             with open(res_path, 'r', encoding='utf-8') as fh:
-                for line in fh.readlines():
-                    self.number_of_filtered_rows += 1
-                    count_words_filtered += len(line.split())
-            with open(file_path, 'r', encoding='utf-8') as fh:
-                for line in fh.readlines():
-                    number_of_total_rows += 1
-                    count_words += len(line.split())
-
+                for i, line in enumerate(fh):
+                    try:
+                        json_data = json.loads(line)
+                        self.number_of_filtered_rows += 1
+                        count_words_filtered += len(json_data['text'].split())
+                    except:
+                        pass
         with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(f"Number of words before filtering: {count_words}\n")
-            f.write(f"Number of rows before filtering: : {number_of_total_rows}\n---------------------------\n")
             f.write(f"Number of words after filtering: {count_words_filtered}\n")
             f.write(f"Number of rows after filtering: : {self.number_of_filtered_rows}\n")
             f.write(f"Normalizing Time: {(time.time() - start_time):.3f} s\n---------------------------\n")
