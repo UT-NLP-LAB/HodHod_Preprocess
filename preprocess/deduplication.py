@@ -1,6 +1,5 @@
 import json
 import os
-import time
 from collections import defaultdict
 from multiprocessing import cpu_count, Queue, Process
 from datasketch import MinHash
@@ -13,6 +12,7 @@ from .utils import get_all_files
 import networkit as nk
 from glob import glob
 from tqdm import tqdm
+import time
 
 
 def _h_bytes(hs):
@@ -43,7 +43,7 @@ def get_features(s: str):
     s = s.lower()
     # remove punctuation
     s = s.translate(str.maketrans("", "", string.punctuation))
-    s = s.replace(":><؟!.،,?", "")
+    s = s.translate(str.maketrans("", "", ":><؟!.،,?"))
     # remove consecutive spaces, newlines, tabs in the middle and in the beginning / end
     s = re.sub(r"\s+", " ", s.strip())
     return s.split()
@@ -51,18 +51,19 @@ def get_features(s: str):
 
 class Deduplication:
     def __init__(self):
+        self.n_proc = 0
         self.lsh_folder = ""
-        self.BAND = 9
-        self.doc_queues = [Queue(1000000) for _ in range(self.BAND)]
+        self.BAND = 2
+        self.doc_queues = [Queue(1000000000) for _ in range(self.BAND)]
         self.lsh_dicts = [defaultdict(list) for _ in range(self.BAND)]
         self.width = 13
-        self.range = 25
+        self.range = 50
         self.lsh_out = ""
         self.duplicates = defaultdict()
         self.data_path = "result/normalized/"
 
     def generate_hash(self, file_paths: list[str]):
-        for file_path in tqdm(file_paths, total=len(file_paths)):
+        for file_path in tqdm(file_paths, total=len(file_paths), desc='generate_hash'):
             with open(file_path, 'r', encoding='utf-8') as fh:
                 for line in fh:
                     json_data = json.loads(line)
@@ -71,16 +72,22 @@ class Deduplication:
                     [mini_hash.update(x.encode('utf8')) for x in map_text]
                     lean_minhash = LeanMinHash(mini_hash)
                     for i, doc_queue in enumerate(self.doc_queues):
-                        if (i + 1) * self.range < len(lean_minhash.hashvalues):
-                            h_bytes = _h_bytes(lean_minhash.hashvalues[i * self.range: (i + 1) * self.range])
-                            doc_queue.put((f'{file_path}@{json_data["id"]}', h_bytes))
+                        h_bytes = _h_bytes(lean_minhash.hashvalues[
+                                           i * self.range: min((i + 1) * self.range, len(lean_minhash.hashvalues))])
+                        doc_queue.put((f'{file_path}@{json_data["id"]}', h_bytes))
+        for doc_queue in self.doc_queues:
+            doc_queue.put(("Done", "Done"))
 
     def lsh(self, doc_queue, lsh_dict, idx):
         i = 0
+        done_process = 0
         with open(f'{self.lsh_folder}/deduplication{idx}.txt', 'w', encoding='utf-8') as f:
             while True:
                 try:
                     key, h_bytes = doc_queue.get(timeout=30)
+                    if key == "Done":
+                        done_process += 1
+                        continue
                     cand = lsh_dict.get(h_bytes, "None")
                     lsh_dict[str(idx) + str(h_bytes)].append(key)
                     if cand != "None":
@@ -88,20 +95,21 @@ class Deduplication:
                     else:
                         lsh_dict[h_bytes] = key
                     i += 1
-                    if i % 10000 == 0:
-                        print(f"process {idx}: {i} passed")
+                    if i % 1000000 == 0:
+                        print(f"process {idx}: {i}")
                 except queue.Empty:
-                    print(f"process {idx}: Done")
-                    break
-        print(f"Total number of documents: {i}")
+                    if done_process == self.n_proc:
+                        break
+        print(f"process {idx}: Done")
+        print(f"Total number of documents {idx}: {i}")
 
     def generate_pairs(self, all_files: list[str]):
-        n_proc = cpu_count()
-        parts = divide(n_proc, all_files)
-        print(f"resetting to {n_proc} for number of processes")
+        self.n_proc = cpu_count() - 1
+        parts = divide(self.n_proc, all_files)
+        print(f"resetting to {self.n_proc} for number of processes")
         processes = []
 
-        for process_id in range(n_proc):
+        for process_id in range(self.n_proc):
             p = Process(
                 target=self.generate_hash,
                 args=(list(parts[process_id]),),
@@ -173,11 +181,11 @@ class Deduplication:
         idx = 0
         with open(log_path, 'a', encoding='utf-8') as log_file:
             duplicates = self.generate_connected_components_mp(log_file)
-            for file_path in tqdm(all_files, total=len(all_files)):
+            for file_path in tqdm(all_files, total=len(all_files), desc='preprocess_files'):
                 res_path = f'{res_folder}/{sub_folder_name}/{sub_folder_name}{str(idx)}.jsonl'
                 if not os.path.exists(os.path.dirname(res_path)):
                     os.makedirs(os.path.dirname(res_path))
-                with open(res_path, 'w', encoding='utf-8') as result_file:
+                with open(res_path, 'a', encoding='utf-8') as result_file:
                     with open(file_path, 'r', encoding='utf-8') as fh:
                         for line in fh:
                             json_data = json.loads(line)

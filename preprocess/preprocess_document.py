@@ -116,7 +116,7 @@ class Preprocessor:
                                 json_data['text'] = preprocessed_text
                                 json_data['source'] = source
                                 self.write_json(json_data, f)
-                        except json.decoder.JSONDecodeError as e:
+                        except json.decoder.JSONDecodeError:
                             print("Error in reading file: ", file_path)
                 elif file_type == '.json':
                     try:
@@ -126,7 +126,7 @@ class Preprocessor:
                             json_data['text'] = self.preprocess_line(json_data['text'])
                             json_data['source'] = source
                             self.write_json(json_data, f)
-                    except json.decoder.JSONDecodeError as e:
+                    except json.decoder.JSONDecodeError:
                         print("Error in reading file: ", file_path)
                 elif file_type == '.csv':
                     try:
@@ -177,12 +177,9 @@ class Preprocessor:
             res_path = f'{self.normalized_folder}/{file_name}.jsonl'
             with open(res_path, 'r', encoding='utf-8') as fh:
                 for i, line in enumerate(fh):
-                    try:
-                        json_data = json.loads(line)
-                        self.number_of_filtered_rows += 1
-                        count_words_filtered += len(json_data['text'].split())
-                    except:
-                        pass
+                    json_data = json.loads(line)
+                    self.number_of_filtered_rows += 1
+                    count_words_filtered += len(json_data['text'].split())
         with open(log_path, 'a', encoding='utf-8') as f:
             f.write(f"Number of words after filtering: {count_words_filtered}\n")
             f.write(f"Number of rows after filtering: : {self.number_of_filtered_rows}\n")
