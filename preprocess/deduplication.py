@@ -53,11 +53,11 @@ class Deduplication:
     def __init__(self):
         self.n_proc = 0
         self.lsh_folder = ""
-        self.BAND = 2
+        self.BAND = 1
         self.doc_queues = [Queue(1000000000) for _ in range(self.BAND)]
         self.lsh_dicts = [defaultdict(list) for _ in range(self.BAND)]
         self.width = 13
-        self.range = 50
+        self.range = 100
         self.lsh_out = ""
         self.duplicates = defaultdict()
         self.data_path = "result/normalized/"
@@ -72,39 +72,45 @@ class Deduplication:
                     [mini_hash.update(x.encode('utf8')) for x in map_text]
                     lean_minhash = LeanMinHash(mini_hash)
                     for i, doc_queue in enumerate(self.doc_queues):
-                        h_bytes = _h_bytes(lean_minhash.hashvalues[
-                                           i * self.range: min((i + 1) * self.range, len(lean_minhash.hashvalues))])
-                        doc_queue.put((f'{file_path}@{json_data["id"]}', h_bytes))
+                        if i == 0 or (i + 1) * self.range < len(lean_minhash.hashvalues):
+                            h_bytes = _h_bytes(lean_minhash.hashvalues[
+                                               i * self.range: min((i + 1) * self.range, len(lean_minhash.hashvalues))])
+                            doc_queue.put((f'{file_path}@{json_data["id"]}', h_bytes))
+                    del mini_hash
+                    del lean_minhash
         for doc_queue in self.doc_queues:
             doc_queue.put(("Done", "Done"))
+        print("PROCESS DONE")
 
     def lsh(self, doc_queue, lsh_dict, idx):
         i = 0
         done_process = 0
+        pbar = tqdm(total=118418132, desc='lsh')  # TODO
         with open(f'{self.lsh_folder}/deduplication{idx}.txt', 'w', encoding='utf-8') as f:
             while True:
                 try:
                     key, h_bytes = doc_queue.get(timeout=30)
                     if key == "Done":
                         done_process += 1
+                        print(f'done processes: {done_process}')
                         continue
                     cand = lsh_dict.get(h_bytes, "None")
-                    lsh_dict[str(idx) + str(h_bytes)].append(key)
                     if cand != "None":
                         f.write(f'{key} :: {cand}\n')
                     else:
                         lsh_dict[h_bytes] = key
-                    i += 1
-                    if i % 1000000 == 0:
-                        print(f"process {idx}: {i}")
+                    pbar.update(1)
                 except queue.Empty:
                     if done_process == self.n_proc:
+                        lsh_dict = {}
+                        doc_queue = Queue(10)
+                        pbar.close()
                         break
         print(f"process {idx}: Done")
         print(f"Total number of documents {idx}: {i}")
 
     def generate_pairs(self, all_files: list[str]):
-        self.n_proc = cpu_count() - 1
+        self.n_proc = 4
         parts = divide(self.n_proc, all_files)
         print(f"resetting to {self.n_proc} for number of processes")
         processes = []
@@ -181,7 +187,7 @@ class Deduplication:
         idx = 0
         with open(log_path, 'a', encoding='utf-8') as log_file:
             duplicates = self.generate_connected_components_mp(log_file)
-            for file_path in tqdm(all_files, total=len(all_files), desc='preprocess_files'):
+            for file_path in tqdm(all_files, desc='preprocess_files'):
                 res_path = f'{res_folder}/{sub_folder_name}/{sub_folder_name}{str(idx)}.jsonl'
                 if not os.path.exists(os.path.dirname(res_path)):
                     os.makedirs(os.path.dirname(res_path))
@@ -194,7 +200,7 @@ class Deduplication:
                                 total_rows += 1
                                 total_words += len(json_data['text'].split())
                                 result_file.write('\n')
-                                if total_rows % 800000 == 799999:
+                                if total_rows % 1000000 == 999999:
                                     idx += 1
             log_file.write(f"Number of words: {total_words}\n")
             log_file.write(f"Filtered rows: {total_rows}\n")

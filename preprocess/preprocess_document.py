@@ -14,6 +14,30 @@ import string
 from .utils import get_all_files
 from collections import Counter
 
+wierd_pattern = re.compile("["
+                           u"\U0001F600-\U0001F64F"  # emoticons
+                           u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+                           u"\U0001F680-\U0001F6FF"  # transport & map symbols
+                           u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+                           u"\U00002702-\U000027B0"
+                           u"\U000024C2-\U0001F251"
+                           u"\U0001f926-\U0001f937"
+                           u'\U00010000-\U0010ffff'
+                           u"\u200d"
+                           u"\u2640-\u2642"
+                           u"\u2600-\u2B55"
+                           u"\u23cf"
+                           u"\u23e9"
+                           u"\u231a"
+                           u"\u3030"
+                           u"\ufe0f"
+                           u"\u2069"
+                           u"\u2066"
+                           # u"\u200c"
+                           u"\u2068"
+                           u"\u2067"
+                           "]+", flags=re.UNICODE)
+
 
 class Preprocessor:
     def __init__(self, threshold=30, char_threshold=35, min_threshold=50):
@@ -73,7 +97,8 @@ class Preprocessor:
     def preprocess_line(self, text: str):
         text = self.normalizer.normalize(text)
         text = re.sub(r'\b[A-Z]+\b', '', text)
-        text = re.sub(r'<[^>]+>', '', text)
+        text = re.sub(r'<[^>]+>', '', text)  # removing wierd patterns
+        text = wierd_pattern.sub(r'', text)
         text = text.translate(str.maketrans("", "", "‎‏‪‫ ‭‮"))
         sents = [sen for sen in self.tokenizer.sentence_tokenize(text)]
         list_of_sentences = [[str(token) for token in self.spacy_tokenizer(sen)] for sen in sents]
@@ -160,12 +185,7 @@ class Preprocessor:
         start_time = time.time()
         data_dir = self.data_path + sub_folder_name
         all_files = get_all_files(data_dir)
-        log_name = sub_folder_name
-        log_path = f'./result/logs/{log_name}.txt'
-        if not os.path.exists('./result/logs'):
-            os.makedirs('./result/logs')
-        with open(log_path, 'w', encoding='utf-8') as f:
-            f.write(f"Total files: {len(all_files)}\n")
+        self.count_files(sub_folder_name)
         self.filtering = filtering
         self.normalize_files(all_files)
         count_words_filtered = 0
@@ -180,7 +200,41 @@ class Preprocessor:
                     json_data = json.loads(line)
                     self.number_of_filtered_rows += 1
                     count_words_filtered += len(json_data['text'].split())
-        with open(log_path, 'a', encoding='utf-8') as f:
+        with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(f"Number of words after filtering: {count_words_filtered}\n")
             f.write(f"Number of rows after filtering: : {self.number_of_filtered_rows}\n")
             f.write(f"Normalizing Time: {(time.time() - start_time):.3f} s\n---------------------------\n")
+
+    def count_files(self, sub_folder_name: str):
+        data_dir = self.data_path + sub_folder_name
+        all_files = get_all_files(data_dir)
+        log_name = sub_folder_name
+        self.log_path = f'./result/logs/{log_name}.txt'
+        count_words = 0  # total number of words
+        number_of_rows = 0  # total number of rows
+        if not os.path.exists('./result/logs'):
+            os.makedirs('./result/logs')
+        with open(self.log_path, 'w', encoding='utf-8') as f:
+            f.write(f"Total files: {len(all_files)}\n")
+        for file_path in tqdm(all_files, desc="counting"):
+            file_type = os.path.splitext(file_path)[-1]
+            with open(file_path, 'r', encoding='utf-8') as fh:
+                if file_type == '.jsonl':
+                    for i, line in enumerate(fh):
+                        try:
+                            json_data = json.loads(line)
+                            number_of_rows += 1
+                            count_words += len(json_data['text'].split())
+                        except json.decoder.JSONDecodeError:
+                            print("Error in reading file: ", file_path)
+                elif file_type == '.json':
+                    try:
+                        json_datas = json.load(fh)
+                        for i, json_data in enumerate(json_datas):
+                            number_of_rows += 1
+                            count_words += len(json_data['text'].split())
+                    except json.decoder.JSONDecodeError:
+                        print("Error in reading file: ", file_path)
+        with open(self.log_path, 'a', encoding='utf-8') as f:
+            f.write(f"Number of words before filtering: {count_words}\n")
+            f.write(f"Number of rows before filtering: : {number_of_rows}\n")
