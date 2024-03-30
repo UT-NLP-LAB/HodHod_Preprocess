@@ -13,7 +13,6 @@ import csv
 import string
 from .utils import get_all_files
 from collections import Counter
-import sys
 
 wierd_pattern = re.compile("["
                            u"\U0001F600-\U0001F64F"  # emoticons
@@ -61,7 +60,7 @@ class Preprocessor:
         self.number_of_total_rows = 0
         self.number_of_filtered_rows = 0
         self.filtering = True
-        csv.field_size_limit(sys.maxsize)
+        csv.field_size_limit(10000000)
 
     def get_features(self, s: str):
         s = s.lower()
@@ -167,7 +166,7 @@ class Preprocessor:
                             json_data['source'] = source
                             json_data['text'] = self.preprocess_line(json_data['text'])
                             self.write_json(json_data, f)
-                    except:
+                    except Exception as e:
                         print("Error in reading file: ", file_path)
         return self.normalized_folder
 
@@ -239,6 +238,18 @@ class Preprocessor:
                             number_of_rows += 1
                             count_words += len(json_data['text'].split())
                     except json.decoder.JSONDecodeError:
+                        print("Error in reading file: ", file_path)
+                elif file_type == '.csv':
+                    try:
+                        csv_reader = csv.reader(fh)
+                        columns = next(csv_reader)
+                        for i, row in enumerate(csv_reader):
+                            json_data = {}
+                            for index in range(len(columns)):
+                                json_data[columns[index]] = row[index]
+                            number_of_rows += 1
+                            count_words += len(json_data['text'].split())
+                    except Exception as e:
                         print("Error in reading file: ", file_path)
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(f"Number of words before filtering: {count_words}\n")

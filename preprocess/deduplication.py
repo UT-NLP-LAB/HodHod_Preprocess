@@ -85,7 +85,7 @@ class Deduplication:
     def lsh(self, doc_queue, lsh_dict, idx):
         i = 0
         done_process = 0
-        pbar = tqdm(total=118418132, desc='lsh')  # TODO
+        pbar = tqdm(desc='lsh')
         with open(f'{self.lsh_folder}/deduplication{idx}.txt', 'w', encoding='utf-8') as f:
             while True:
                 try:
