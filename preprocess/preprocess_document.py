@@ -13,6 +13,7 @@ import csv
 import string
 from .utils import get_all_files
 from collections import Counter
+import sys
 
 wierd_pattern = re.compile("["
                            u"\U0001F600-\U0001F64F"  # emoticons
@@ -60,6 +61,7 @@ class Preprocessor:
         self.number_of_total_rows = 0
         self.number_of_filtered_rows = 0
         self.filtering = True
+        csv.field_size_limit(sys.maxsize)
 
     def get_features(self, s: str):
         s = s.lower()
@@ -158,9 +160,12 @@ class Preprocessor:
                         csv_reader = csv.reader(fh)
                         columns = next(csv_reader)
                         for i, row in enumerate(csv_reader):
-                            json_data = {'id': f"{source}-{file_name}-{i}"}
+                            json_data = {}
                             for index in range(len(columns)):
                                 json_data[columns[index]] = row[index]
+                            json_data['id'] = f"{source}-{file_name}-{i}"
+                            json_data['source'] = source
+                            json_data['text'] = self.preprocess_line(json_data['text'])
                             self.write_json(json_data, f)
                     except:
                         print("Error in reading file: ", file_path)
