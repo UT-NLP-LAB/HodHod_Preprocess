@@ -7,7 +7,7 @@
 
 🥇 Welcome to HodHod_Preprocess! This repository offers scripts designed for end-to-end pre-processing of the HodHod
 dataset. HodHod is the first large-scale, cleaned Persian dataset available in text format. You can find the
-dataset [here](https://huggingface.co/UT-NLP-LAP).
+dataset [here]([https://huggingface.co/UT-NLP-LAP](https://huggingface.co/datasets/UT-NLP-LAP/HodHod)).
 
 ## Key Features:
 
