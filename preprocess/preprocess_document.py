@@ -108,6 +108,7 @@ class Preprocessor:
         return text
 
     def preprocess_document(self, text: str):
+        text = re.sub(r'\n+', '\n', text)
         lines = text.splitlines()
         return '\n'.join([self.preprocess_line(text_line) for text_line in lines])
 
