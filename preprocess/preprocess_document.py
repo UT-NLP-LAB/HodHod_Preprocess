@@ -36,6 +36,7 @@ wierd_pattern = re.compile("["
                            # u"\u200c"
                            u"\u2068"
                            u"\u2067"
+                           u"\u0640"
                            "]+", flags=re.UNICODE)
 
 
@@ -44,7 +45,7 @@ class Preprocessor:
         self.log_path = None
         self.normalizer = NormalizerBuilder(
             [Config.PUNCTUATION_FA, Config.ALPHABET_FA, Config.DIGIT_FA, Config.ALPHABET_EN, Config.DIGIT_EN,
-             Config.DIGIT_FA, Config.DIACRITIC_DELETE, Config.SPACE_NORMAL, Config.PUNCTUATION_FA,
+             Config.DIGIT_FA, Config.DIACRITIC_DELETE, Config.SPACE_KEEP, Config.PUNCTUATION_FA,
              Config.PUNCTUATION_EN],
             remove_extra_spaces=True,
             tokenization=True).build()
@@ -101,6 +102,7 @@ class Preprocessor:
         text = re.sub(r'<[^>]+>', '', text)  # removing wierd patterns
         text = wierd_pattern.sub(r'', text)
         text = text.translate(str.maketrans("", "", "‎‏‪‫ ‭‮"))
+        text = text.replace("")
         sents = [sen for sen in self.tokenizer.sentence_tokenize(text)]
         list_of_sentences = [[str(token) for token in self.spacy_tokenizer(sen)] for sen in sents]
         tokens = [item for sublist in list_of_sentences for item in sublist]
@@ -110,7 +112,9 @@ class Preprocessor:
     def preprocess_document(self, text: str):
         text = re.sub(r'\n+', '\n', text)
         lines = text.splitlines()
-        return '\n'.join([self.preprocess_line(text_line) for text_line in lines])
+        text = '\n'.join([self.preprocess_line(text_line) for text_line in lines])
+        text = re.sub(r'\n+', '\n', text)
+        return text
 
     def write_json(self, json_data, f):
         if self.filtering:
