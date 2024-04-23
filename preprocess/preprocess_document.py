@@ -100,9 +100,9 @@ class Preprocessor:
         text = self.normalizer.normalize(text)
         text = re.sub(r'\b[A-Z]+\b', '', text)
         text = re.sub(r'<[^>]+>', '', text)  # removing wierd patterns
-        text = wierd_pattern.sub(r'', text)
-        text = text.translate(str.maketrans("", "", "‎‏‪‫ ‭‮"))
-        text = text.replace("")
+        text = wierd_pattern.sub(r'', text)  # Deleting unicodes
+        text = re.sub(r'(.)\1{2,}', r'\1', text)  # Deleting repeated chars
+        text = text.translate(str.maketrans("", "", "‎‏‪‫ ‭‮"))  # Deleting pdf special characters
         sents = [sen for sen in self.tokenizer.sentence_tokenize(text)]
         list_of_sentences = [[str(token) for token in self.spacy_tokenizer(sen)] for sen in sents]
         tokens = [item for sublist in list_of_sentences for item in sublist]
