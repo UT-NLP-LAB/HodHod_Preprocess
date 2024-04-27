@@ -114,11 +114,13 @@ class Preprocessor:
 
     def preprocess_line(self, text: str):
         text = self.normalizer.normalize(text)
+        text = re.sub(r'\.\s([a-zA-Z])', r'.\1', text)
         text = re.sub(r'\b[A-Z]+\b', '', text)
         text = re.sub(r'<[^>]+>', '', text)  # removing wierd patterns
         text = wierd_pattern.sub(r'', text)  # Deleting unicodes
         text = re.sub(r'(.)\1{2,}', r'\1', text)  # Deleting repeated chars
         text = text.translate(str.maketrans("", "", "‎‏‪‫ ‭‮"))  # Deleting pdf special characters
+        text = text.replace('ه . ش', 'ه.ش').replace('ه . ق', 'ه.ق')  # ه.ش و ه.ق
         sents = [sen for sen in self.tokenizer.sentence_tokenize(text)]
         list_of_sentences = [[str(token) for token in self.custom_tokenize(sen)] for sen in sents]
         tokens = [item for sublist in list_of_sentences for item in sublist]
@@ -129,7 +131,7 @@ class Preprocessor:
         text = re.sub(r'\n+', '\n', text)
         lines = text.splitlines()
         lines = ([self.preprocess_line(text_line) for text_line in lines])
-        if 'انتهای پیام' in lines[-1]:
+        if 'انتهای پیام' in lines[-1] or 'نظرات کاربران' in lines[-1]:
             lines.pop()
         text = '\n'.join(lines)
         text = re.sub(r'\n+', '\n', text)
@@ -138,8 +140,8 @@ class Preprocessor:
     def write_json(self, json_data, f):
         if self.filtering:
             is_clean_text, s = self.get_features(json_data['text'])
-            if is_clean_text and self.is_persian_text(s) and self.check_short_lines(
-                    s) and self.most_repeated_word_over_threshold(s):
+            if (is_clean_text and self.is_persian_text(s) and self.check_short_lines(s)
+                    and self.most_repeated_word_over_threshold(s)):
                 json.dump(json_data, f, ensure_ascii=False)
                 f.write('\n')
         else:
@@ -244,8 +246,6 @@ class Preprocessor:
             os.makedirs('./result/logs')
         with open(self.log_path, 'w', encoding='utf-8') as f:
             f.write(f"Total files: {len(all_files)}\n")
-        hashtag_pattern = r'#(\w+)'
-        hashtag_counts = {}
         for file_path in tqdm(all_files, desc="counting"):
             file_type = os.path.splitext(file_path)[-1]
             with open(file_path, 'r', encoding='utf-8') as fh:
@@ -255,9 +255,6 @@ class Preprocessor:
                             json_data = json.loads(line)
                             number_of_rows += 1
                             count_words += len(json_data['text'].split())
-                            hashtags = re.findall(hashtag_pattern, json_data['text'])
-                            for hashtag in hashtags:
-                                hashtag_counts[hashtag] = hashtag_counts.get(hashtag, 0) + 1
                         except json.decoder.JSONDecodeError:
                             print("Error in reading file: ", file_path)
                 elif file_type == '.json':
@@ -266,9 +263,6 @@ class Preprocessor:
                         for i, json_data in enumerate(json_datas):
                             number_of_rows += 1
                             count_words += len(json_data['text'].split())
-                            hashtags = re.findall(hashtag_pattern, json_data['text'])
-                            for hashtag in hashtags:
-                                hashtag_counts[hashtag] = hashtag_counts.get(hashtag, 0) + 1
                     except json.decoder.JSONDecodeError:
                         print("Error in reading file: ", file_path)
                 elif file_type == '.csv':
@@ -281,15 +275,9 @@ class Preprocessor:
                                 json_data[columns[index]] = row[index]
                             number_of_rows += 1
                             count_words += len(json_data['text'].split())
-                            hashtags = re.findall(hashtag_pattern, json_data['text'])
-                            for hashtag in hashtags:
-                                hashtag_counts[hashtag] = hashtag_counts.get(hashtag, 0) + 1
                     except Exception as e:
                         print("Error in reading file: ", file_path)
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(f"Number of words before filtering: {count_words}\n")
             f.write(f"Number of rows before filtering: : {number_of_rows}\n")
-        hashtag_counts = sorted(hashtag_counts.items(), key=lambda x: -x[1])
-        with open(f'./result/logs/hashtags_{log_name}.txt', 'w', encoding='utf-8') as f:
-            for hashtag, count in hashtag_counts:
-                f.write(f"{hashtag}: {count}\n")
+
