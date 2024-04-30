@@ -41,7 +41,7 @@ wierd_pattern = re.compile("["
 
 
 class Preprocessor:
-    def __init__(self, threshold=30, char_threshold=35, min_threshold=50):
+    def __init__(self, threshold=30, char_threshold=35, min_threshold=50, line_threshold=20):
         self.log_path = None
         self.normalizer = NormalizerBuilder(
             [Config.PUNCTUATION_FA, Config.ALPHABET_FA, Config.DIGIT_FA, Config.ALPHABET_EN, Config.DIGIT_EN,
@@ -57,10 +57,12 @@ class Preprocessor:
         self.threshold = threshold
         self.min_threshold = min_threshold
         self.char_threshold = char_threshold
+        self.line_threshold = line_threshold
         self.normalized_folder = ""
         self.number_of_total_rows = 0
         self.number_of_filtered_rows = 0
         self.filtering = True
+
         csv.field_size_limit(10000000)
 
     def custom_tokenize(self, text):
@@ -107,7 +109,7 @@ class Preprocessor:
 
     def check_short_lines(self, text):
         lines = text.split('\n')
-        short_line_count = sum(1 for line in lines if len(line.strip()) < 15)
+        short_line_count = sum(1 for line in lines if len(line.strip()) < self.line_threshold)
         total_line_count = len(lines)
         portion_short_lines = (short_line_count / total_line_count) * 100
         return portion_short_lines < self.min_threshold
@@ -116,26 +118,28 @@ class Preprocessor:
         text = self.normalizer.normalize(text)
         text = re.sub(r'\.\s([a-zA-Z])', r'.\1', text)
         text = re.sub(r'\b[A-Z]+\b', '', text)
-        text = re.sub(r'<[^>]+>', '', text)  # removing wierd patterns
+        text = re.sub(r'<[^>]+>', '', text)  # removing html tags
         text = wierd_pattern.sub(r'', text)  # Deleting unicodes
-        text = re.sub(r'(.)\1{2,}', r'\1', text)  # Deleting repeated chars
+        text = re.sub(r"(.)\1{2,}", r"\1\1", text)  # Deleting repeated chars
         text = text.translate(str.maketrans("", "", "‎‏‪‫ ‭‮"))  # Deleting pdf special characters
         text = text.replace('ه . ش', 'ه.ش').replace('ه . ق', 'ه.ق')  # ه.ش و ه.ق
         sents = [sen for sen in self.tokenizer.sentence_tokenize(text)]
         list_of_sentences = [[str(token) for token in self.custom_tokenize(sen)] for sen in sents]
         tokens = [item for sublist in list_of_sentences for item in sublist]
         text = ' '.join(tokens)
-        return text
+        return text.strip()
 
     def preprocess_document(self, text: str):
-        text = re.sub(r'\n+', '\n', text)
+        text = re.sub(r'\n\s*\t*\n*', '\n', text)
+        text = re.sub(r'<style.*?</style>', '', text, flags=re.DOTALL)  # delete css tags
         lines = text.splitlines()
         lines = ([self.preprocess_line(text_line) for text_line in lines])
-        if 'انتهای پیام' in lines[-1] or 'نظرات کاربران' in lines[-1]:
+        while (len(lines[-1]) < 10 or 'انتهای پیام' in lines[-1] or 'نظرات کاربران' in lines[-1]
+               or 'به این مطلب امتیاز دهید' in lines[-1]):
             lines.pop()
         text = '\n'.join(lines)
-        text = re.sub(r'\n+', '\n', text)
-        return text
+        text = re.sub(r'\n\s*\t*\n*', '\n', text)
+        return text.strip()
 
     def write_json(self, json_data, f):
         if self.filtering:
@@ -280,4 +284,3 @@ class Preprocessor:
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(f"Number of words before filtering: {count_words}\n")
             f.write(f"Number of rows before filtering: : {number_of_rows}\n")
-
