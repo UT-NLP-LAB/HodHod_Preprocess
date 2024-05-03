@@ -41,7 +41,7 @@ wierd_pattern = re.compile("["
 
 
 class Preprocessor:
-    def __init__(self, threshold=30, char_threshold=35, min_threshold=50, line_threshold=20):
+    def __init__(self, threshold=30, char_threshold=35, min_threshold=50, line_threshold=6):
         self.log_path = None
         self.normalizer = NormalizerBuilder(
             [Config.PUNCTUATION_FA, Config.ALPHABET_FA, Config.DIGIT_FA, Config.ALPHABET_EN, Config.DIGIT_EN,
@@ -57,7 +57,7 @@ class Preprocessor:
         self.threshold = threshold
         self.min_threshold = min_threshold
         self.char_threshold = char_threshold
-        self.line_threshold = line_threshold
+        self.line_threshold = line_threshold  # number of words in each line
         self.normalized_folder = ""
         self.number_of_total_rows = 0
         self.number_of_filtered_rows = 0
@@ -109,19 +109,21 @@ class Preprocessor:
 
     def check_short_lines(self, text):
         lines = text.split('\n')
-        short_line_count = sum(1 for line in lines if len(line.strip()) < self.line_threshold)
+        short_line_count = sum(1 for line in lines if len(line.split()) < self.line_threshold)
         total_line_count = len(lines)
         portion_short_lines = (short_line_count / total_line_count) * 100
         return portion_short_lines < self.min_threshold
 
-    def preprocess_line(self, text: str):
-        text = self.normalizer.normalize(text)
+    def preprocess_line(self, text: str, source: str):
         text = re.sub(r'\.\s([a-zA-Z])', r'.\1', text)
         text = re.sub(r'\b[A-Z]+\b', '', text)
         text = re.sub(r'<[^>]+>', '', text)  # removing html tags
         text = wierd_pattern.sub(r'', text)  # Deleting unicodes
-        text = re.sub(r"(.)\1{2,}", r"\1\1", text)  # Deleting repeated chars
+        if 'socialMedia' in source:
+            re.sub(r"https://t\.me/[\w/]+", '', text)
         text = text.translate(str.maketrans("", "", "‎‏‪‫ ‭‮"))  # Deleting pdf special characters
+        text = self.normalizer.normalize(text)
+        text = re.sub(r"(.)\1{2,}", r"\1\1", text)  # Deleting repeated chars
         text = text.replace('ه . ش', 'ه.ش').replace('ه . ق', 'ه.ق')  # ه.ش و ه.ق
         sents = [sen for sen in self.tokenizer.sentence_tokenize(text)]
         list_of_sentences = [[str(token) for token in self.custom_tokenize(sen)] for sen in sents]
@@ -129,14 +131,15 @@ class Preprocessor:
         text = ' '.join(tokens)
         return text.strip()
 
-    def preprocess_document(self, text: str):
+    def preprocess_document(self, text: str, source: str):
         text = re.sub(r'\n\s*\t*\n*', '\n', text)
         text = re.sub(r'<style.*?</style>', '', text, flags=re.DOTALL)  # delete css tags
         lines = text.splitlines()
-        lines = ([self.preprocess_line(text_line) for text_line in lines])
-        while (len(lines[-1]) < 10 or 'انتهای پیام' in lines[-1] or 'نظرات کاربران' in lines[-1]
-               or 'به این مطلب امتیاز دهید' in lines[-1]):
-            lines.pop()
+        lines = ([self.preprocess_line(text_line, source) for text_line in lines])
+        if 'baznashr' in source:
+            while (len(lines[-1]) < 10 or 'انتهای پیام' in lines[-1] or 'نظرات کاربران' in lines[-1]
+                   or 'به این مطلب امتیاز دهید' in lines[-1]):
+                lines.pop()
         text = '\n'.join(lines)
         text = re.sub(r'\n\s*\t*\n*', '\n', text)
         return text.strip()
