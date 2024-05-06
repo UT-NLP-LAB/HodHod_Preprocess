@@ -1,6 +1,5 @@
 from collections import defaultdict, Counter
-
-from preprocess.utils import get_all_files
+import pathlib
 from tqdm import tqdm
 import os
 import json
@@ -8,6 +7,15 @@ import re
 
 hashtag_pattern = r'#(\w+)'
 hashtag_counts = {}
+
+
+def get_all_files(data_dir: str):
+    all_files = []
+    for subdir, dirs, files in os.walk(data_dir):
+        for file in files:
+            file = os.path.join(subdir, file)
+            all_files.append(str(pathlib.PurePosixPath(pathlib.Path(str(file)))))
+    return all_files
 
 
 def get_hashtags(sub_folder_name: str):
@@ -119,6 +127,6 @@ def remove_hashtags(sub_folder_name: str):
 
 
 if __name__ == '__main__':
-    # get_hashtags('telegram')
-    # get_keywords('telegram')
-    remove_hashtags('telegram')
+    get_hashtags('wikies')
+    get_keywords('wikies')
+    # remove_hashtags('socialMedia')

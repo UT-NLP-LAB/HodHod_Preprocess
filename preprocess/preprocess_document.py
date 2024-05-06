@@ -119,7 +119,7 @@ class Preprocessor:
         text = re.sub(r'\b[A-Z]+\b', '', text)
         text = re.sub(r'<[^>]+>', '', text)  # removing html tags
         text = wierd_pattern.sub(r'', text)  # Deleting unicodes
-        if 'socialMedia' in source:
+        if 'wikies' in source:
             re.sub(r"https://t\.me/[\w/]+", '', text)
         text = text.translate(str.maketrans("", "", "‎‏‪‫ ‭‮"))  # Deleting pdf special characters
         text = self.normalizer.normalize(text)
@@ -137,9 +137,19 @@ class Preprocessor:
         lines = text.splitlines()
         lines = ([self.preprocess_line(text_line, source) for text_line in lines])
         if 'baznashr' in source:
-            while (len(lines[-1]) < 10 or 'انتهای پیام' in lines[-1] or 'نظرات کاربران' in lines[-1]
+            while (len(lines[-1]) < 25 or 'انتهای پیام' in lines[-1] or 'نظرات کاربران' in lines[-1]
                    or 'به این مطلب امتیاز دهید' in lines[-1]):
                 lines.pop()
+        if 'socialMedia' in source:
+            for i, line in enumerate(lines[::-1]):
+                words = line.split(" ")
+                while len(words) > 0 and (words[-1].startswith("#") or words[-1].startswith("@")):
+                    words.pop()
+                if len(words) > 0:
+                    lines[len(lines) - i - 1] = " ".join(words)
+                    break
+                else:
+                    lines[len(lines) - i - 1] = ''
         text = '\n'.join(lines)
         text = re.sub(r'\n\s*\t*\n*', '\n', text)
         return text.strip()
@@ -170,7 +180,7 @@ class Preprocessor:
                         try:
                             json_data = json.loads(line)
                             json_data['id'] = f"{source}-{file_name}-{i}"
-                            preprocessed_text = self.preprocess_document(json_data['text'])
+                            preprocessed_text = self.preprocess_document(json_data['text'], source)
                             if preprocessed_text:
                                 json_data['text'] = preprocessed_text
                                 json_data['source'] = source
@@ -182,7 +192,7 @@ class Preprocessor:
                         json_datas = json.load(fh)
                         for i, json_data in enumerate(json_datas):
                             json_data['id'] = f"{source}-{file_name}-{i}"
-                            json_data['text'] = self.preprocess_line(json_data['text'])
+                            json_data['text'] = self.preprocess_line(json_data['text'], source)
                             json_data['source'] = source
                             self.write_json(json_data, f)
                     except json.decoder.JSONDecodeError:
@@ -197,7 +207,7 @@ class Preprocessor:
                                 json_data[columns[index]] = row[index]
                             json_data['id'] = f"{source}-{file_name}-{i}"
                             json_data['source'] = source
-                            json_data['text'] = self.preprocess_line(json_data['text'])
+                            json_data['text'] = self.preprocess_line(json_data['text'], source)
                             self.write_json(json_data, f)
                     except Exception as e:
                         print("Error in reading file: ", file_path)

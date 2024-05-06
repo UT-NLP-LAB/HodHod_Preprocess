@@ -13,7 +13,7 @@ def extract_text(data):
 
 if __name__ == '__main__':
     # Load the JSON file
-    with open('../../data/SocialMedia/qomnet/full', 'r', encoding='utf-8') as f:
+    with open('../../data/wikies/qomnet/full', 'r', encoding='utf-8') as f:
         data = json.load(f)
 
     # Process each dictionary item and extract text if 'uri' exists
@@ -25,6 +25,6 @@ if __name__ == '__main__':
                 extracted_data.append({'uri': item['uri'], 'text': text})
 
     # Write the extracted data to a JSON Lines file
-    with open('../../data/SocialMedia/qomnet/qomnet.jsonl', 'w', encoding='utf-8') as f:
+    with open('../../data/wikies/qomnet/qomnet.jsonl', 'w', encoding='utf-8') as f:
         for item in extracted_data:
             f.write(json.dumps(item, ensure_ascii=False) + '\n')
