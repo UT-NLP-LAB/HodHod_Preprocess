@@ -42,9 +42,13 @@ def get_features(s: str):
     # lower cased
     s = s.lower()
     re.sub(r"[\d٠١٢٣٤٥٦٧٨٩]+", " ", s)
+    s = s.replace('جمعه', '').replace('شنبه','')
+    persian_numbers = ["یک", "دو", "سه", "چهار", "پنج", "شش", "هفت", "هشت", "نه", "ده"]
+    pattern = re.compile(f"({'|'.join(persian_numbers)})")
+    s = pattern.sub("", s)
     # remove punctuation
-    s = s.translate(str.maketrans("", " ", string.punctuation))
-    s = s.translate(str.maketrans("", " ", "/:><؟!.،,?"))
+    s = s.translate(str.maketrans("", "", string.punctuation))
+    s = s.translate(str.maketrans("", "", "/:><؟!.،,?"))
     # remove consecutive spaces, newlines, tabs in the middle and in the beginning / end
     s = re.sub(r"\s+", " ", s.strip())
     return s.split()
