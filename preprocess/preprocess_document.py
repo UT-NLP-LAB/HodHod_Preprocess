@@ -119,8 +119,9 @@ class Preprocessor:
         text = re.sub(r'\b[A-Z]+\b', '', text)
         text = re.sub(r'<[^>]+>', '', text)  # removing html tags
         text = wierd_pattern.sub(r'', text)  # Deleting unicodes
-        if 'wikies' in source:
+        if 'socialMedia' in source:
             re.sub(r"https://t\.me/[\w/]+", '', text)
+            re.sub(r"eitta\.me/[\w/]+", '', text)
         text = text.translate(str.maketrans("", "", "‎‏‪‫ ‭‮"))  # Deleting pdf special characters
         text = self.normalizer.normalize(text)
         text = re.sub(r"(.)\1{2,}", r"\1\1", text)  # Deleting repeated chars

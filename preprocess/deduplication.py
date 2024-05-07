@@ -41,9 +41,10 @@ def find_connected_components(graph):
 def get_features(s: str):
     # lower cased
     s = s.lower()
+    re.sub(r"[\d٠١٢٣٤٥٦٧٨٩]+", " ", s)
     # remove punctuation
-    s = s.translate(str.maketrans("", "", string.punctuation))
-    s = s.translate(str.maketrans("", "", ":><؟!.،,?"))
+    s = s.translate(str.maketrans("", " ", string.punctuation))
+    s = s.translate(str.maketrans("", " ", "/:><؟!.،,?"))
     # remove consecutive spaces, newlines, tabs in the middle and in the beginning / end
     s = re.sub(r"\s+", " ", s.strip())
     return s.split()
