@@ -1,18 +1,19 @@
+import csv
 import json
+import os
+import re
+import string
 import time
+from collections import Counter
+from multiprocessing import Pool, cpu_count
 
-from tqdm import tqdm
 from piraye import NormalizerBuilder
 from piraye.tasks.normalizer.normalizer_builder import Config
 from piraye.tasks.tokenizer.nltk_tokenizer import NltkTokenizer
-import re
-import os
-from multiprocessing import Pool, cpu_count
 from spacy.lang.en import English
-import csv
-import string
+from tqdm import tqdm
+
 from .utils import get_all_files
-from collections import Counter
 
 wierd_pattern = re.compile("["
                            u"\U0001F600-\U0001F64F"  # emoticons
@@ -138,12 +139,13 @@ class Preprocessor:
         lines = text.splitlines()
         lines = ([self.preprocess_line(text_line, source) for text_line in lines])
         if 'baznashr' in source:
-            while (len(lines[-1]) < 25 or 'انتهای پیام' in lines[-1] or 'نظرات کاربران' in lines[-1]
-                   or 'به این مطلب امتیاز دهید' in lines[-1]):
+            delete_list = ['انتهای پیام', 'نظرات کاربران', 'به این مطلب امتیاز دهید', 'تبادل نظر کنید', 'بیشتر بخوانید',
+                           'اعتمادآنلاین', 'پایان پیام ']
+            while (len(lines[-1])) < 25 and any(ext in lines[-1] for ext in delete_list):
                 lines.pop()
         if 'socialMedia' in source:
             for i, line in enumerate(lines[::-1]):
-                words = line.split(" ")
+                words = line.strip().split(" ")
                 while len(words) > 0 and (words[-1].startswith("#") or words[-1].startswith("@")):
                     words.pop()
                 if len(words) > 0:
