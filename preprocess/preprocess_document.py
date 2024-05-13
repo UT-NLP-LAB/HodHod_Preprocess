@@ -42,7 +42,7 @@ wierd_pattern = re.compile("["
 
 
 class Preprocessor:
-    def __init__(self, threshold=30, char_threshold=35, min_threshold=50, line_threshold=6):
+    def __init__(self, threshold=30, char_threshold=35, min_threshold=50, line_threshold=6, number_threshold=0.75):
         self.log_path = None
         self.normalizer = NormalizerBuilder(
             [Config.PUNCTUATION_FA, Config.ALPHABET_FA, Config.DIGIT_FA, Config.ALPHABET_EN, Config.DIGIT_EN,
@@ -63,6 +63,7 @@ class Preprocessor:
         self.number_of_total_rows = 0
         self.number_of_filtered_rows = 0
         self.filtering = True
+        self.number_threshold = number_threshold
 
         csv.field_size_limit(10000000)
 
@@ -85,7 +86,7 @@ class Preprocessor:
     def get_features(self, s: str):
         s = s.lower()
         s = s.translate(str.maketrans("", "", string.punctuation))
-        s = s.translate(str.maketrans("", "", ":><؟!.،,?"))
+        s = s.translate(str.maketrans("", "", ":><؟!.،,?."))
         s = re.sub(r"\s+", " ", s.strip())
         return len(s.split()) > self.threshold, s
 
@@ -115,6 +116,14 @@ class Preprocessor:
         portion_short_lines = (short_line_count / total_line_count) * 100
         return portion_short_lines < self.min_threshold
 
+    def check_count_numbers_line(self, line):
+        num_punct_count = sum(1 for char in line if char.isdigit() or char in ':><؟!.،,?..,?!;:-()[]{}"\'')
+        total_chars = len(line)
+        if num_punct_count / total_chars >= self.number_threshold:
+            return ""
+        else:
+            return line
+
     def preprocess_line(self, text: str, source: str):
         text = re.sub(r'\.\s([a-zA-Z])', r'.\1', text)
         text = re.sub(r'\b[A-Z]+\b', '', text)
@@ -127,6 +136,8 @@ class Preprocessor:
         text = self.normalizer.normalize(text)
         text = re.sub(r"(.)\1{2,}", r"\1\1", text)  # Deleting repeated chars
         text = text.replace('ه . ش', 'ه.ش').replace('ه . ق', 'ه.ق')  # ه.ش و ه.ق
+        if 'paper' in source:
+            text = self.check_count_numbers_line(text)
         sents = [sen for sen in self.tokenizer.sentence_tokenize(text)]
         list_of_sentences = [[str(token) for token in self.custom_tokenize(sen)] for sen in sents]
         tokens = [item for sublist in list_of_sentences for item in sublist]
