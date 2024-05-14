@@ -7,6 +7,7 @@ import time
 from collections import Counter
 from multiprocessing import Pool, cpu_count
 
+import pandas as pd
 from piraye import NormalizerBuilder
 from piraye.tasks.normalizer.normalizer_builder import Config
 from piraye.tasks.tokenizer.nltk_tokenizer import NltkTokenizer
@@ -171,8 +172,8 @@ class Preprocessor:
     def write_json(self, json_data, f):
         if self.filtering:
             is_clean_text, s = self.get_features(json_data['text'])
-            if (is_clean_text and self.is_persian_text(s) and self.check_short_lines(s)
-                    and self.most_repeated_word_over_threshold(s)):
+            if (is_clean_text and self.is_persian_text(s) and self.check_short_lines(json_data['text'])
+                    and self.most_repeated_word_over_threshold(json_data['text'])):
                 json.dump(json_data, f, ensure_ascii=False)
                 f.write('\n')
         else:
@@ -219,6 +220,19 @@ class Preprocessor:
                             json_data = {}
                             for index in range(len(columns)):
                                 json_data[columns[index]] = row[index]
+                            json_data['id'] = f"{source}-{file_name}-{i}"
+                            json_data['source'] = source
+                            json_data['text'] = self.preprocess_line(json_data['text'], source)
+                            self.write_json(json_data, f)
+                    except Exception as e:
+                        print("Error in reading file: ", file_path)
+                elif file_type == '.parquet':
+                    try:
+                        df = pd.read_parquet(file_path)
+                        for i, row in df.iterrows():
+                            json_data = {}
+                            for column in df.columns:
+                                json_data[column] = row[column]
                             json_data['id'] = f"{source}-{file_name}-{i}"
                             json_data['source'] = source
                             json_data['text'] = self.preprocess_line(json_data['text'], source)
@@ -306,6 +320,14 @@ class Preprocessor:
                                 json_data[columns[index]] = row[index]
                             number_of_rows += 1
                             count_words += len(json_data['text'].split())
+                    except Exception as e:
+                        print("Error in reading file: ", file_path)
+                elif file_type == '.parquet':
+                    try:
+                        df = pd.read_parquet(file_path)
+                        for i, row in df.iterrows():
+                            number_of_rows += 1
+                            count_words += len(row['text'].split())
                     except Exception as e:
                         print("Error in reading file: ", file_path)
         with open(self.log_path, 'a', encoding='utf-8') as f:
