@@ -1,18 +1,21 @@
 import json
 import os
-from collections import defaultdict
-from multiprocessing import cpu_count, Queue, Process
-from datasketch import MinHash
+import queue
 import re
 import string
-from datasketch.lean_minhash import LeanMinHash
-import queue
-from more_itertools import divide
-from .utils import get_all_files
-import networkit as nk
-from glob import glob
-from tqdm import tqdm
 import time
+from collections import defaultdict
+from glob import glob
+from multiprocessing import Queue, Process
+
+import networkit as nk
+from datasketch import MinHash
+from datasketch.lean_minhash import LeanMinHash
+from more_itertools import divide
+from nltk import ngrams
+from tqdm import tqdm
+
+from .utils import get_all_files
 
 
 def _h_bytes(hs):
@@ -38,11 +41,11 @@ def find_connected_components(graph):
     return cc.getComponents(), cc.numberOfComponents()
 
 
-def get_features(s: str):
+def get_features(s: str, width: int):
     # lower cased
     s = s.lower()
     re.sub(r"[\d٠١٢٣٤٥٦٧٨٩]+", " ", s)
-    s = s.replace('جمعه', '').replace('شنبه','')
+    s = s.replace('جمعه', '').replace('شنبه', '')
     persian_numbers = ["یک", "دو", "سه", "چهار", "پنج", "شش", "هفت", "هشت", "نه", "ده"]
     pattern = re.compile(f"({'|'.join(persian_numbers)})")
     s = pattern.sub("", s)
@@ -51,18 +54,18 @@ def get_features(s: str):
     s = s.translate(str.maketrans("", "", "/:><؟!.،,?"))
     # remove consecutive spaces, newlines, tabs in the middle and in the beginning / end
     s = re.sub(r"\s+", " ", s.strip())
-    return s.split()
+    return map(lambda x: "".join(x), ngrams(s, width))
 
 
 class Deduplication:
     def __init__(self):
         self.n_proc = 0
         self.lsh_folder = ""
-        self.BAND = 1
+        self.BAND = 9
         self.doc_queues = [Queue(1000000000) for _ in range(self.BAND)]
         self.lsh_dicts = [defaultdict(list) for _ in range(self.BAND)]
         self.width = 13
-        self.range = 100
+        self.range = 13
         self.lsh_out = ""
         self.duplicates = defaultdict()
         self.data_path = "result/normalized/"
@@ -72,32 +75,31 @@ class Deduplication:
             with open(file_path, 'r', encoding='utf-8') as fh:
                 for line in fh:
                     json_data = json.loads(line)
-                    map_text = get_features(json_data['text'])
+                    map_text = get_features(json_data['text'], self.width)
                     mini_hash = MinHash(num_perm=128)
                     [mini_hash.update(x.encode('utf8')) for x in map_text]
                     lean_minhash = LeanMinHash(mini_hash)
                     for i, doc_queue in enumerate(self.doc_queues):
-                        if i == 0 or (i + 1) * self.range < len(lean_minhash.hashvalues):
-                            h_bytes = _h_bytes(lean_minhash.hashvalues[
-                                               i * self.range: min((i + 1) * self.range, len(lean_minhash.hashvalues))])
-                            doc_queue.put((f'{file_path}@{json_data["id"]}', h_bytes))
+                        h_bytes = _h_bytes(lean_minhash.hashvalues[
+                                           i * self.range: min((i + 1) * self.range, len(lean_minhash.hashvalues))])
+                        doc_queue.put((f'{file_path}@{json_data["id"]}', h_bytes))
                     del mini_hash
                     del lean_minhash
         for doc_queue in self.doc_queues:
             doc_queue.put(("Done", "Done"))
-        print("PROCESS DONE")
+        # print("PROCESS DONE")
 
     def lsh(self, doc_queue, lsh_dict, idx):
         i = 0
         done_process = 0
-        pbar = tqdm(desc='lsh')
+        pbar = tqdm(desc=f'lsh{idx}: ')
         with open(f'{self.lsh_folder}/deduplication{idx}.txt', 'w', encoding='utf-8') as f:
             while True:
                 try:
                     key, h_bytes = doc_queue.get(timeout=30)
                     if key == "Done":
                         done_process += 1
-                        print(f'done processes: {done_process}')
+                        print(f'done processes for {idx}: {done_process}')
                         continue
                     cand = lsh_dict.get(h_bytes, "None")
                     if cand != "None":

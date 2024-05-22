@@ -43,7 +43,7 @@ wierd_pattern = re.compile("["
 
 
 class Preprocessor:
-    def __init__(self, threshold=30, char_threshold=35, min_threshold=50, line_threshold=6, number_threshold=0.75):
+    def __init__(self, threshold=50, char_threshold=35, min_threshold=50, line_threshold=15, number_threshold=0.75):
         self.log_path = None
         self.normalizer = NormalizerBuilder(
             [Config.PUNCTUATION_FA, Config.ALPHABET_FA, Config.DIGIT_FA, Config.ALPHABET_EN, Config.DIGIT_EN,
@@ -54,6 +54,7 @@ class Preprocessor:
         self.tokenizer = NltkTokenizer()
         self.nlp = English()
         self.spacy_tokenizer = self.nlp.tokenizer
+        self.nlp.max_length = 15000000
         self.data_path = "data/"
 
         self.threshold = threshold
@@ -66,7 +67,7 @@ class Preprocessor:
         self.filtering = True
         self.number_threshold = number_threshold
 
-        csv.field_size_limit(10000000)
+        csv.field_size_limit(1000000000)
 
     def custom_tokenize(self, text):
         doc = self.nlp(text)
@@ -153,7 +154,7 @@ class Preprocessor:
         if 'baznashr' in source:
             delete_list = ['انتهای پیام', 'نظرات کاربران', 'به این مطلب امتیاز دهید', 'تبادل نظر کنید', 'بیشتر بخوانید',
                            'اعتمادآنلاین', 'پایان پیام ']
-            while (len(lines[-1])) < 25 and any(ext in lines[-1] for ext in delete_list):
+            while len(lines) > 0 and (len(lines[-1])) < 25 and any(ext in lines[-1] for ext in delete_list):
                 lines.pop()
         if 'socialMedia' in source:
             for i, line in enumerate(lines[::-1]):
@@ -195,11 +196,12 @@ class Preprocessor:
                         try:
                             json_data = json.loads(line)
                             json_data['id'] = f"{source}-{file_name}-{i}"
-                            preprocessed_text = self.preprocess_document(json_data['text'], source)
-                            if preprocessed_text:
-                                json_data['text'] = preprocessed_text
-                                json_data['source'] = source
-                                self.write_json(json_data, f)
+                            if isinstance(json_data['text'], str):
+                                preprocessed_text = self.preprocess_document(json_data['text'], source)
+                                if preprocessed_text:
+                                    json_data['text'] = preprocessed_text
+                                    json_data['source'] = source
+                                    self.write_json(json_data, f)
                         except json.decoder.JSONDecodeError:
                             print("Error in reading file: ", file_path)
                 elif file_type == '.json':
@@ -225,7 +227,7 @@ class Preprocessor:
                             json_data['text'] = self.preprocess_line(json_data['text'], source)
                             self.write_json(json_data, f)
                     except Exception as e:
-                        print("Error in reading file: ", file_path)
+                        print("Error in reading file: ", file_path, str(e))
                 elif file_type == '.parquet':
                     try:
                         df = pd.read_parquet(file_path)
@@ -238,11 +240,12 @@ class Preprocessor:
                             json_data['text'] = self.preprocess_line(json_data['text'], source)
                             self.write_json(json_data, f)
                     except Exception as e:
-                        print("Error in reading file: ", file_path)
+                        print("Error in reading file: ", file_path, str(e))
+        #        print("finished : ", file_path)
         return self.normalized_folder
 
     def normalize_files(self, all_files: list[str]):
-        n_proc = cpu_count()
+        n_proc = cpu_count() - 56
         print(f"resetting to {n_proc} for number of processes")
         with Pool(processes=n_proc) as pool:
             pbar = tqdm(
@@ -260,7 +263,8 @@ class Preprocessor:
         start_time = time.time()
         data_dir = self.data_path + sub_folder_name
         all_files = get_all_files(data_dir)
-        self.count_files(sub_folder_name)
+        self.log_path = f'./result/logs/{sub_folder_name}.txt'
+        #        self.count_files(sub_folder_name)
         self.filtering = filtering
         self.normalize_files(all_files)
         count_words_filtered = 0
@@ -299,7 +303,8 @@ class Preprocessor:
                         try:
                             json_data = json.loads(line)
                             number_of_rows += 1
-                            count_words += len(json_data['text'].split())
+                            if isinstance(json_data['text'], str):
+                                count_words += len(json_data['text'].split())
                         except json.decoder.JSONDecodeError:
                             print("Error in reading file: ", file_path)
                 elif file_type == '.json':
@@ -321,7 +326,7 @@ class Preprocessor:
                             number_of_rows += 1
                             count_words += len(json_data['text'].split())
                     except Exception as e:
-                        print("Error in reading file: ", file_path)
+                        print("Error in reading file: ", file_path, str(e))
                 elif file_type == '.parquet':
                     try:
                         df = pd.read_parquet(file_path)
@@ -329,7 +334,7 @@ class Preprocessor:
                             number_of_rows += 1
                             count_words += len(row['text'].split())
                     except Exception as e:
-                        print("Error in reading file: ", file_path)
+                        print("Error in reading file: ", file_path, str(e))
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(f"Number of words before filtering: {count_words}\n")
             f.write(f"Number of rows before filtering: : {number_of_rows}\n")

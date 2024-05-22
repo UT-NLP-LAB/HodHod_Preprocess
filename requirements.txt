@@ -7,3 +7,4 @@ more-itertools~=10.2.0
 networkit~=11.0
 pandas~=2.2.1
 beautifulsoup4~=4.12.3
+pyarrow
