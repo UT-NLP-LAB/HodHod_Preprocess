@@ -13,6 +13,7 @@ from piraye.tasks.normalizer.normalizer_builder import Config
 from piraye.tasks.tokenizer.nltk_tokenizer import NltkTokenizer
 from spacy.lang.en import English
 from tqdm import tqdm
+from transformers import AutoTokenizer
 
 from .utils import get_all_files
 
@@ -43,7 +44,8 @@ wierd_pattern = re.compile("["
 
 
 class Preprocessor:
-    def __init__(self, threshold=50, char_threshold=35, min_threshold=50, line_threshold=15, number_threshold=0.75):
+    def __init__(self, token_ratio_quality=False, threshold=50, char_threshold=35, min_threshold=50,
+                 line_threshold=15, number_threshold=0.75):
         self.log_path = None
         self.normalizer = NormalizerBuilder(
             [Config.PUNCTUATION_FA, Config.ALPHABET_FA, Config.DIGIT_FA, Config.ALPHABET_EN, Config.DIGIT_EN,
@@ -66,8 +68,19 @@ class Preprocessor:
         self.number_of_filtered_rows = 0
         self.filtering = True
         self.number_threshold = number_threshold
-
         csv.field_size_limit(1000000000)
+        self.token_ratio_quality = token_ratio_quality
+        if token_ratio_quality:
+            self.base_model_id = 'FacebookAI/xlm-roberta-large'
+            os.environ["TOKENIZERS_PARALLELISM"] = "false"
+            self.bert_tokenizer = AutoTokenizer.from_pretrained(
+                self.base_model_id,
+                add_eos_token=True,
+                add_bos_token=True,
+                use_fast=True,
+                padding=False,
+                truncation=False,
+            )
 
     def custom_tokenize(self, text):
         doc = self.nlp(text)
@@ -97,6 +110,14 @@ class Preprocessor:
         total_chars = len(text)
         percentage = (persian_chars / total_chars) * 100 if total_chars > 0 else 0
         return percentage > self.char_threshold
+
+    def token_ratio_quality_assessment(self, text, filter_th=3):
+        tokens = len(self.bert_tokenizer.tokenize(text))
+        text_len = len(text)
+        if text_len / tokens >= filter_th:
+            return True
+        else:
+            return False
 
     def most_repeated_word_over_threshold(self, text):
         # Tokenize the text into words
@@ -172,11 +193,13 @@ class Preprocessor:
 
     def write_json(self, json_data, f):
         if self.filtering:
-            is_clean_text, s = self.get_features(json_data['text'])
-            if (is_clean_text and self.is_persian_text(s) and self.check_short_lines(json_data['text'])
-                    and self.most_repeated_word_over_threshold(json_data['text'])):
-                json.dump(json_data, f, ensure_ascii=False)
-                f.write('\n')
+            text = json_data['text']
+            is_clean_text, s = self.get_features(text)
+            if (is_clean_text and self.is_persian_text(s) and self.check_short_lines(text)
+                    and self.most_repeated_word_over_threshold(text)):
+                if not self.token_ratio_quality or self.token_ratio_quality_assessment(text):
+                    json.dump(json_data, f, ensure_ascii=False)
+                    f.write('\n')
         else:
             json.dump(json_data, f, ensure_ascii=False)
             f.write('\n')
@@ -245,7 +268,7 @@ class Preprocessor:
         return self.normalized_folder
 
     def normalize_files(self, all_files: list[str]):
-        n_proc = cpu_count() - 56
+        n_proc = cpu_count() - 1
         print(f"resetting to {n_proc} for number of processes")
         with Pool(processes=n_proc) as pool:
             pbar = tqdm(
@@ -264,7 +287,7 @@ class Preprocessor:
         data_dir = self.data_path + sub_folder_name
         all_files = get_all_files(data_dir)
         self.log_path = f'./result/logs/{sub_folder_name}.txt'
-        #        self.count_files(sub_folder_name)
+        self.count_files(sub_folder_name)
         self.filtering = filtering
         self.normalize_files(all_files)
         count_words_filtered = 0
