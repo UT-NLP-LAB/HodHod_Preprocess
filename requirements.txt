@@ -1,7 +1,7 @@
-tqdm~=4.66.1
+tqdm
 datasketch~=1.6.4
 nltk~=3.8.1
-piraye==0.4.0
+piraye
 spacy~=3.7.2
 more-itertools~=10.2.0
 networkit~=11.0
