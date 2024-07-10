@@ -45,7 +45,7 @@ wierd_pattern = re.compile("["
 
 class Preprocessor:
     def __init__(self, token_ratio_quality=False, threshold=50, char_threshold=35, min_threshold=50,
-                 line_threshold=15, number_threshold=0.75):
+                 line_threshold=10, number_threshold=0.75):
         self.log_path = None
         self.normalizer = NormalizerBuilder(
             [Config.PUNCTUATION_FA, Config.ALPHABET_FA, Config.DIGIT_FA, Config.ALPHABET_EN, Config.DIGIT_EN,
@@ -140,7 +140,8 @@ class Preprocessor:
         return portion_short_lines < self.min_threshold
 
     def check_count_numbers_line(self, line):
-        num_punct_count = sum(1 for char in line if char.isdigit() or char in ':><؟!.،,?..,?!;:-()[]{}"\'')
+        num_punct_count = sum(
+            1 for char in line if char.isdigit() or char in ':><؟!.،,?..,?!%;:-()[]{}$@#^&*۰۱۲۳۴۵۶۷۸۹"\'')
         total_chars = len(line)
         if num_punct_count / total_chars >= self.number_threshold:
             return ""
@@ -180,7 +181,7 @@ class Preprocessor:
         if 'socialMedia' in source:
             for i, line in enumerate(lines[::-1]):
                 words = line.strip().split(" ")
-                while len(words) > 0 and (words[-1].startswith("#") or words[-1].startswith("@")):
+                while len(words) > 0 and ("#" in words[-1] or "@" in words[-1] or len(words[-1]) <= 1):
                     words.pop()
                 if len(words) > 0:
                     lines[len(lines) - i - 1] = " ".join(words)

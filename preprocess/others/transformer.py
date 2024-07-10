@@ -13,7 +13,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 tokenizer.pad_token = tokenizer.eos_token
 def xlm_token_counter(text):
     return len(tokenizer.tokenize(text))
-def token_ratio_quality_assesment(text,filter_th=3):
+def ب(text,filter_th=3):
     tokens = xlm_token_counter(text)
     text_len = len(text)
     if text_len/tokens >= filter_th:
