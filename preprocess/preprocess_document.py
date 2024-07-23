@@ -101,7 +101,7 @@ class Preprocessor:
     def get_features(self, s: str):
         s = s.lower()
         s = s.translate(str.maketrans("", "", string.punctuation))
-        s = s.translate(str.maketrans("", "", ":><؟!.،,?."))
+        s = s.translate(str.maketrans("", "", ":><؟!.،,?..,?!%;:-()[]{}$@#^&*"))
         s = re.sub(r"\s+", " ", s.strip())
         return len(s.split()) > self.threshold, s
 
@@ -141,7 +141,7 @@ class Preprocessor:
 
     def check_count_numbers_line(self, line):
         num_punct_count = sum(
-            1 for char in line if char.isdigit() or char in ':><؟!.،,?..,?!%;:-()[]{}$@#^&*۰۱۲۳۴۵۶۷۸۹"\'')
+            1 for char in line if char.isdigit() or char in '=+\¥؛٪:><؟!.،,?!%;:-()[]{}$@#^&*۰۱۲۳۴۵۶۷۸۹"\'')
         total_chars = len(line)
         if num_punct_count / total_chars >= self.number_threshold:
             return ""
@@ -174,8 +174,8 @@ class Preprocessor:
         lines = text.splitlines()
         lines = ([self.preprocess_line(text_line, source) for text_line in lines])
         if 'baznashr' in source:
-            delete_list = ['انتهای پیام', 'نظرات کاربران', 'به این مطلب امتیاز دهید', 'تبادل نظر کنید', 'بیشتر بخوانید',
-                           'اعتمادآنلاین', 'پایان پیام ']
+            delete_list = ['انتهای پیام', 'نظرات کاربران', 'به این مطلب امتیاز دهید', 'تبادل نظر کنید'
+                , 'بیشتر بخوانید', 'اعتمادآنلاین', 'پایان پیام ']
             while len(lines) > 0 and (len(lines[-1])) < 25 and any(ext in lines[-1] for ext in delete_list):
                 lines.pop()
         if 'socialMedia' in source:
