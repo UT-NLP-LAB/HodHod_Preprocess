@@ -44,8 +44,8 @@ wierd_pattern = re.compile("["
 
 
 class Preprocessor:
-    def __init__(self, token_ratio_quality=False, threshold=50, char_threshold=35, min_threshold=50,
-                 line_threshold=10, number_threshold=0.75):
+    def __init__(self, token_ratio_quality=False, threshold=100, char_threshold=35, min_threshold=50,
+                 line_threshold=20, number_threshold=0.2):
         self.log_path = None
         self.normalizer = NormalizerBuilder(
             [Config.PUNCTUATION_FA, Config.ALPHABET_FA, Config.DIGIT_FA, Config.ALPHABET_EN, Config.DIGIT_EN,
@@ -169,15 +169,18 @@ class Preprocessor:
         return text.strip()
 
     def preprocess_document(self, text: str, source: str):
+        text = text.replace('/n', '\n')
         text = re.sub(r'\n\s*\t*\n*', '\n', text)
         text = re.sub(r'<style.*?</style>', '', text, flags=re.DOTALL)  # delete css tags
         lines = text.splitlines()
         lines = ([self.preprocess_line(text_line, source) for text_line in lines])
         if 'baznashr' in source:
             delete_list = ['انتهای پیام', 'نظرات کاربران', 'به این مطلب امتیاز دهید', 'تبادل نظر کنید'
-                , 'بیشتر بخوانید', 'اعتمادآنلاین', 'پایان پیام ']
-            while len(lines) > 0 and (len(lines[-1])) < 25 and any(ext in lines[-1] for ext in delete_list):
+                , 'بیشتر بخوانید', 'اعتمادآنلاین', 'پایان پیام ', 'گفتگو با شبکه تلویزیونی سی بی اس آمریکا']
+            while len(lines) > 0 and (len(lines[-1])) < 35 and any(ext in lines[-1] for ext in delete_list):
                 lines.pop()
+            while len(lines) > 0 and (len(lines[0])) < 35 and any(ext in lines[0] for ext in delete_list):
+                lines.pop(0)
         if 'socialMedia' in source:
             for i, line in enumerate(lines[::-1]):
                 words = line.strip().split(" ")
