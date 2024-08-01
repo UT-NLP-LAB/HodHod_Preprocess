@@ -141,7 +141,7 @@ class Preprocessor:
 
     def check_count_numbers_line(self, line):
         num_punct_count = sum(
-            1 for char in line if char.isdigit() or char in '=+\¥؛٪:><؟!.،,?!%;:-()[]{}$@#^&*۰۱۲۳۴۵۶۷۸۹"\'')
+            1 for char in line if char.isdigit() or char in '=+؛٪:><؟!.،,?!%;:¥-()[]{}$@#^&*۰۱۲۳۴۵۶۷۸۹"\'')
         total_chars = len(line)
         if num_punct_count / total_chars >= self.number_threshold:
             return ""
@@ -156,7 +156,7 @@ class Preprocessor:
         if 'socialMedia' in source:
             re.sub(r"https://t\.me/[\w/]+", '', text)
             re.sub(r"eitta\.me/[\w/]+", '', text)
-        text = text.translate(str.maketrans("", "", "‎‏‪‫ ‭‮"))  # Deleting pdf special characters
+        text = text.translate(str.maketrans("", "", "‎‏‪‫ ‭‮"))  # Deleting PDF special characters
         text = self.normalizer.normalize(text)
         text = re.sub(r"(.)\1{2,}", r"\1\1", text)  # Deleting repeated chars
         text = text.replace('ه . ش', 'ه.ش').replace('ه . ق', 'ه.ق')  # ه.ش و ه.ق
@@ -175,12 +175,14 @@ class Preprocessor:
         lines = text.splitlines()
         lines = ([self.preprocess_line(text_line, source) for text_line in lines])
         if 'baznashr' in source:
-            delete_list = ['انتهای پیام', 'نظرات کاربران', 'به این مطلب امتیاز دهید', 'تبادل نظر کنید'
-                , 'بیشتر بخوانید', 'اعتمادآنلاین', 'پایان پیام ', 'گفتگو با شبکه تلویزیونی سی بی اس آمریکا']
+            delete_list = ['انتهای پیام', 'نظرات کاربران', 'به این مطلب امتیاز دهید', 'تبادل نظر کنید', 'بیشتر بخوانید',
+                           'اعتمادآنلاین', 'پایان پیام ', 'گفتگو با شبکه تلویزیونی سی بی اس آمریکا']
             while len(lines) > 0 and (len(lines[-1])) < 35 and any(ext in lines[-1] for ext in delete_list):
                 lines.pop()
             while len(lines) > 0 and (len(lines[0])) < 35 and any(ext in lines[0] for ext in delete_list):
                 lines.pop(0)
+            seen = set()
+            lines = [x for x in lines if not (x in seen or seen.add(x))]
         if 'socialMedia' in source:
             for i, line in enumerate(lines[::-1]):
                 words = line.strip().split(" ")
