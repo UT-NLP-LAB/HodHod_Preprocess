@@ -178,9 +178,11 @@ class Preprocessor:
         if 'baznashr' in source:
             delete_list = ['انتهای پیام', 'نظرات کاربران', 'به این مطلب امتیاز دهید', 'تبادل نظر کنید', 'بیشتر بخوانید',
                            'اعتمادآنلاین', 'پایان پیام ', 'گفتگو با شبکه تلویزیونی سی بی اس آمریکا']
-            while len(lines) > 0 and (len(lines[-1])) < 35 and any(ext in lines[-1] for ext in delete_list):
+            while len(lines) > 0 and ((len(lines[-1]) < 40 and any(ext in lines[-1] for ext in delete_list)) or
+                                      lines[-1].startswith("http") or len(lines[-1]) < 25):
                 lines.pop()
-            while len(lines) > 0 and (len(lines[0])) < 35 and any(ext in lines[0] for ext in delete_list):
+            while len(lines) > 0 and ((len(lines[0]) < 40 and any(ext in lines[0] for ext in delete_list)) or
+                                      lines[0].startswith("http") or len(lines[0]) < 25):
                 lines.pop(0)
             seen = set()
             lines = [x for x in lines if not (x in seen or seen.add(x))]
