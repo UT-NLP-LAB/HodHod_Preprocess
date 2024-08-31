@@ -170,6 +170,7 @@ class Preprocessor:
 
     def preprocess_document(self, text: str, source: str):
         text = text.replace('/n', '\n')
+        text = text.replace('n\\', '\n')
         text = re.sub(r'\n\s*\t*\n*', '\n', text)
         text = re.sub(r'<style.*?</style>', '', text, flags=re.DOTALL)  # delete css tags
         lines = text.splitlines()
