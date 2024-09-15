@@ -169,10 +169,12 @@ class Preprocessor:
         return text.strip()
 
     def preprocess_document(self, text: str, source: str):
-        text = text.replace('/n', '\n')
-        text = text.replace('n\\', '\n')
         text = re.sub(r'\n\s*\t*\n*', '\n', text)
         text = re.sub(r'<style.*?</style>', '', text, flags=re.DOTALL)  # delete css tags
+        if 'madlad' in source:
+            text = text.replace('/n', '\n').replace('n\\', '\n').replace('\\n', '\n')
+            text = re.sub(r'\\+n', r'\n', text)
+            text = re.sub(r'\\+t', r'\t', text)
         lines = text.splitlines()
         lines = ([self.preprocess_line(text_line, source) for text_line in lines])
         if 'baznashr' in source:
